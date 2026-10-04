@@ -1,10 +1,64 @@
 # Marketing Automation Platform
 
-Increment 1 of Slice 1: the data model with access rules, and the offer scoring engine.
+Increments 1 and 2 of Slice 1: the data model with access rules, the offer scoring engine, and the web application for signing in, choosing a niche and platforms, and scoring offers.
 
 Story IDs refer to the story bank, "Marketing Automation Platform: User Stories".
 
-## What is in this increment
+## Increment 2: the application
+
+| Path | Purpose | Stories |
+| --- | --- | --- |
+| `src/middleware.ts` | Keeps the session fresh; sends signed-out visitors to sign-in | T-02 |
+| `src/app/login` | Sign-in with email and password | T-02 |
+| `src/app/(app)/clients` | Client list and a client's brands | T-01, T-04 |
+| `src/app/(app)/brands/[brandId]` | Niche and platform choices, ranked offers, offer intake, approvals | O-01, O-02, O-03, O-05, O-07, O-08, C-03 |
+| `src/lib/scoring-config.ts` | Loads the scoring configuration: brand, then client, then platform default | C-08 |
+| `src/lib/offers.ts` | Turns stored rows and form input into scoring input | O-02, O-08 |
+
+### Run the application
+
+1. Copy `.env.example` to `.env.local`.
+2. In Supabase, open **Project Settings > API** and copy the **anon public** key into `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Do not use the service role key.
+3. Start it:
+
+```bash
+npm install
+npm run dev
+```
+
+4. Open http://localhost:3000 and sign in with the user created in Supabase.
+
+### Deploy to Vercel (development)
+
+1. Import the GitHub repository in Vercel.
+2. Add the two variables from `.env.example` under **Settings > Environment Variables**.
+3. Deploy. Vercel detects Next.js without further settings.
+
+### What was verified, and what was not
+
+| Check | Result |
+| --- | --- |
+| Type check | Passes |
+| Unit tests | 24 pass |
+| Production build | Passes |
+| Signed-out requests redirect to sign-in | Verified against the built application |
+| Screens render on desktop and mobile | Verified with sample data in place of the database |
+| Sign-in and data against the real Supabase project | Not verified. It needs the project's anon key, which is entered only on your machine. Run the walkthrough below. |
+
+### First-run walkthrough
+
+1. Sign in. You should land on **Clients** and see Vividha Marketing with one brand.
+2. Open AffiQube. Enter a niche, tick platforms, and save.
+3. Add an offer with these figures: payout 42.25, conversion rate 0.40, earnings per click 0.17, gravity 14.92, recurring No, compliance risk Low, seller restrictions Low. It should score 48 and be marked Free traffic.
+4. Click **Approve offer** before approving the rules. You should be told to approve the seller's rules first.
+5. Click **Approve seller's rules**, then **Approve offer**. It should now show as approved.
+6. In Supabase, open the `audit_log` table. The approvals should be recorded with your user ID.
+
+### Note on TypeScript
+
+TypeScript is pinned to version 5. Next.js 15 does not yet read the project settings correctly with TypeScript 7.
+
+## Increment 1: data model and scoring engine
 
 | Path | Purpose | Stories |
 | --- | --- | --- |
@@ -20,7 +74,7 @@ Scoring engine (needs Node 20 or later):
 
 ```bash
 npm install
-npm test          # 13 tests
+npm test          # 24 tests
 npm run typecheck
 ```
 
@@ -71,4 +125,7 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 
 ## Not built yet
 
-The application itself: sign-in, screens, the site module, and the agents. Increment 2 is the Next.js application shell with sign-in, the client and brand screens, and the offer intake and scoring screen wired to this engine.
+- Tracked link generation and the redirect endpoint (O-06, S-07).
+- The site module: public brand sites, offer pages, articles, and the draft, approve, publish flow (Epic 4).
+- Agents, and the ClickBank import (P-01).
+- Screens for creating clients and brands, and for editing scoring weights. These are done in SQL for now.
