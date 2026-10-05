@@ -1,8 +1,63 @@
 # Marketing Automation Platform
 
-Increments 1 and 2 of Slice 1: the data model with access rules, the offer scoring engine, and the web application for signing in, choosing a niche and platforms, and scoring offers.
+Increments 1 to 3 of Slice 1: the data model with access rules, the offer scoring engine, the application for choosing a niche and scoring offers, and the public brand site with compliant pages and tracked links.
 
 Story IDs refer to the story bank, "Marketing Automation Platform: User Stories".
+
+## Increment 3: the public site, pages, and tracked links
+
+| Path | Purpose | Stories |
+| --- | --- | --- |
+| `supabase/migrations/0003_site.sql` | Compliance templates, site pages, click records, publishing rules, public read functions | S-01, S-03, S-04, S-05, S-07, C-04 |
+| `supabase/tests/site_rules.sql` | Database tests for the publishing rules and visitor access | S-03, S-04, S-07, O-05, T-02 |
+| `src/middleware.ts` | Serves a brand's site on its own domain, and the application on admin hosts | S-01 |
+| `src/app/site/[host]` | The public site: home page, pages, and the click-recording redirect | S-01, S-05, S-07 |
+| `src/app/(app)/brands/[brandId]/site` | Business details, standard pages, offer pages, articles, tracked links | C-01, C-04, S-02, S-04, S-06, O-06 |
+| `src/app/(app)/brands/[brandId]/pages/[pageId]` | Page editor with draft, wording check, preview, publish | S-03, K-05 |
+| `src/lib/markdown.ts` | Page renderer that escapes all HTML | S-02 |
+| `src/lib/compliance.ts` | Wording check run before publishing | K-05 |
+
+### Apply the database change
+
+Run `supabase/migrations/0003_site.sql` in the Supabase SQL Editor, then `supabase/verify_site.sql`. All six rows should read "ok".
+
+### How the public site is served
+
+- On an admin host (localhost, any `*.vercel.app` address, or a host listed in the `ADMIN_HOSTS` environment variable) the application is served, and a brand's site can be previewed at `/site/<domain>`.
+- On any other host, the request is treated as a brand's own domain and that brand's site is served from the root. To put a brand live, point its domain at the deployment; no code change is needed.
+- Visitors have no table access. They read published content through four database functions and nothing else.
+
+### Publishing rules
+
+| Rule | Enforced by |
+| --- | --- |
+| A page with no content cannot be published | Database |
+| An offer page needs an approved offer | Database |
+| Offer pages and articles need all four standard pages published first | Database |
+| Wording must pass the compliance check | Application, before the database is asked |
+| Saving a draft never changes what visitors see | Separate draft and published fields |
+| Publishing and unpublishing are recorded | Audit log |
+
+Every offer page carries the affiliate disclosure, added by the page template, so a page cannot be published without it.
+
+### What was verified
+
+| Check | Result |
+| --- | --- |
+| Type check, 43 unit tests, production build | Pass |
+| Database tests: access rules and site rules | Pass on PostgreSQL 16 |
+| End-to-end, in a real browser against a local database and API | 18 checks pass, covering sign-in, scoring, approvals, standard pages, the wording check, publishing, the public site, the click redirect, and click counts |
+| Routing by domain | Verified: a brand domain serves its site at the root, cannot reach the application, and an unknown domain returns "not found" |
+| Against your Supabase project | Not verified from here. Run the walkthrough below. |
+
+### Walkthrough for increment 3
+
+1. Approve an offer for the brand (see increment 2), entering your affiliate link.
+2. Open **Site and links**. Fill in the business details and save.
+3. Click **Create standard pages**, open each of the four, read it, and publish it.
+4. Create the offer page, write its content, and publish. Try a phrase such as "the best course" first to see the wording check refuse it.
+5. Click **View the public site**. The home page should list the offer; its page should show the disclosure and the button.
+6. Click the button. You should land on the seller's site, and the link's click count on **Site and links** should rise by one.
 
 ## Increment 2: the application
 
@@ -39,7 +94,7 @@ npm run dev
 | Check | Result |
 | --- | --- |
 | Type check | Passes |
-| Unit tests | 24 pass |
+| Unit tests | 24 pass at increment 2; 43 now |
 | Production build | Passes |
 | Signed-out requests redirect to sign-in | Verified against the built application |
 | Screens render on desktop and mobile | Verified with sample data in place of the database |
@@ -74,7 +129,7 @@ Scoring engine (needs Node 20 or later):
 
 ```bash
 npm install
-npm test          # 24 tests
+npm test          # 43 tests
 npm run typecheck
 ```
 
@@ -125,7 +180,7 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 
 ## Not built yet
 
-- Tracked link generation and the redirect endpoint (O-06, S-07).
-- The site module: public brand sites, offer pages, articles, and the draft, approve, publish flow (Epic 4).
-- Agents, and the ClickBank import (P-01).
+- The agent that drafts offer pages and articles (S-02, R-02). Pages are written by hand for now, from a starting structure.
+- The ClickBank sales import and the results dashboard (P-01 to P-03).
 - Screens for creating clients and brands, and for editing scoring weights. These are done in SQL for now.
+- Paid campaigns (Slice 2).

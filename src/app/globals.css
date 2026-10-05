@@ -87,3 +87,29 @@ button.quiet { background: transparent; color: var(--ink); }
   form.grid { grid-template-columns: 1fr; }
   .offer { grid-template-columns: 1fr; gap: 8px; }
 }
+
+/* Brand section tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 16px; }
+.tabs a { padding: 8px 14px; text-decoration: none; color: var(--muted); font-weight: 600;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* Site module */
+.split { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.status { font-size: 0.8rem; font-weight: 600; padding: 2px 8px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.status.published { color: var(--paid); }
+.status.draft { color: var(--needs); }
+.status.changed { color: var(--organic); }
+.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.inline label { flex: 1 1 160px; }
+textarea { font: inherit; font-size: 0.95rem; line-height: 1.5; padding: 10px; border: 1px solid var(--line);
+  border-radius: 4px; background: var(--surface); color: var(--ink); width: 100%; min-height: 420px; resize: vertical; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.85rem; word-break: break-all; }
+.problems { margin: 0; padding-left: 20px; }
+.preview { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.preview .site { min-height: 0; }
+.preview .site main { padding: 28px 0 36px; }
+table.links { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.links th, table.links td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+table.links th { color: var(--muted); font-weight: 600; border-top: 0; }
+table.links td.num { text-align: right; font-variant-numeric: tabular-nums; }

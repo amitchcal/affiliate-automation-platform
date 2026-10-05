@@ -1,0 +1,31 @@
+/* Public brand sites: a reading layout. Scoped under .site so it never
+   leaks into the admin application. */
+.site { background: #fff; color: #1f2733; min-height: 100vh; font-size: 18px; line-height: 1.65; }
+.site a { color: #0b4a6f; text-underline-offset: 3px; }
+.site .wrap { max-width: 720px; margin: 0 auto; padding: 0 22px; }
+.site-header { border-bottom: 1px solid #e3e8ef; }
+.site-header .wrap { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-top: 18px; padding-bottom: 18px; }
+.site-header .name { font-size: 1.25rem; font-weight: 700; color: #14213d; text-decoration: none; letter-spacing: -0.01em; }
+.site-header nav a { font-size: 0.95rem; }
+.site main { padding: 40px 0 64px; }
+.site h1 { font-size: 2.1rem; line-height: 1.15; letter-spacing: -0.02em; color: #14213d; margin: 0 0 12px; font-weight: 700; }
+.site h2 { font-size: 1.35rem; line-height: 1.25; color: #14213d; margin: 36px 0 10px; font-weight: 700; }
+.site h3 { font-size: 1.1rem; color: #14213d; margin: 28px 0 8px; font-weight: 700; }
+.site p { margin: 0 0 16px; max-width: none; }
+.site ul, .site ol { margin: 0 0 16px; padding-left: 22px; }
+.site li { margin-bottom: 6px; }
+.site .standfirst { font-size: 1.15rem; color: #4a5568; margin-bottom: 24px; }
+.site .disclosure { background: #f1f5f9; border-left: 4px solid #14213d; padding: 12px 16px; font-size: 0.92rem; margin: 0 0 28px; border-radius: 0 4px 4px 0; }
+.site .cta { margin: 28px 0; }
+.site .button { display: inline-block; background: #14213d; color: #fff; font-weight: 700; padding: 13px 24px; border-radius: 6px; text-decoration: none; }
+.site .button:focus-visible { outline: 3px solid #2643c4; outline-offset: 2px; }
+.site .cta-note { display: block; font-size: 0.82rem; color: #5b6478; margin-top: 8px; }
+.site .listing { list-style: none; padding: 0; margin: 0; }
+.site .listing li { padding: 22px 0; border-top: 1px solid #e3e8ef; margin: 0; }
+.site .listing li:first-child { border-top: 0; padding-top: 0; }
+.site .listing h3 { margin: 0 0 6px; font-size: 1.2rem; }
+.site .listing p { margin: 0 0 8px; color: #4a5568; }
+.site .fine { font-size: 0.85rem; color: #5b6478; }
+.site-footer { border-top: 1px solid #e3e8ef; padding: 24px 0 40px; font-size: 0.9rem; color: #5b6478; }
+.site-footer ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 0; margin: 0 0 12px; }
+@media (max-width: 520px) { .site { font-size: 17px; } .site h1 { font-size: 1.7rem; } }

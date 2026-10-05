@@ -5,6 +5,7 @@ import { loadScoringConfig } from "@/lib/scoring-config";
 import { latestMetrics, MetricsRow, RulesRow, toOfferInput } from "@/lib/offers";
 import { PARAMETER_LABELS } from "@/scoring/config";
 import { Channel, scoreOffer } from "@/scoring/score";
+import { BrandNav } from "@/components/BrandNav";
 import { addOffer, approveOffer, approveRules, saveChoices } from "./actions";
 
 const PLATFORMS: { value: string; label: string; why: string }[] = [
@@ -90,6 +91,7 @@ export default async function BrandPage({
           {brand.domain}
           {brand.target_country ? `, audience in ${brand.target_country}` : ""}
         </p>
+        <BrandNav brandId={brand.id} current="offers" />
       </div>
 
       {notice ? <p className="notice" role="status">{notice}</p> : null}
