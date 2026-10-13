@@ -1,8 +1,45 @@
 # Marketing Automation Platform
 
-Increments 1 to 3 of Slice 1: the data model with access rules, the offer scoring engine, the application for choosing a niche and scoring offers, and the public brand site with compliant pages and tracked links.
+Increments 1 to 4 of Slice 1: the data model with access rules, the offer scoring engine, the application for choosing a niche and scoring offers, the public brand site with compliant pages and tracked links, and results from ClickBank sales.
 
-Story IDs refer to the story bank, "Marketing Automation Platform: User Stories".
+Story IDs refer to the story bank, "Marketing Automation Platform: User Stories". A plain-language explanation of the whole product is in `docs/how-it-works.md`.
+
+## Increment 4: results
+
+| Path | Purpose | Stories |
+| --- | --- | --- |
+| `supabase/migrations/0004_results.sql` | Tracking code per link, `record_click` adds `tid`, `network_sales` table, ClickBank key assigned to one client | P-01, T-02 |
+| `supabase/tests/results_rules.sql` | Database tests: tid construction, no duplicate re-import, rebills kept, access rules, key ownership | P-01, P-03, T-02 |
+| `supabase/verify_results.sql` | Checks to run in the Supabase SQL editor after the migration | P-01 |
+| `src/lib/clickbank.ts` | ClickBank Orders API client and import (server only) | P-01 |
+| `src/lib/results.ts` | Clicks and sales combined per offer; unmatched totals per client | P-02 |
+| `src/app/(app)/brands/[brandId]/results` | Results page with date range, and the manual import | P-01, P-03 |
+| `src/app/(app)/clients/[clientId]` | Unmatched commissions for the client | P-01 |
+
+### Apply the database change
+
+Run `supabase/migrations/0004_results.sql` in the Supabase SQL Editor, then `supabase/verify_results.sql`. All eight rows should read "ok". The migration is safe to run twice.
+
+Add `CLICKBANK_API_KEY` to `.env.local` yourself. It is read only on the server. This is temporary: per-brand credentials in `connections` (C-05) replace it.
+
+### How sales are matched
+
+- Every tracked link has an 8-character code. When a visitor clicks, the redirect adds `tid=<code>` to the seller's link, replacing any `tid` already there and keeping any `#fragment` at the end.
+- The import pulls every ClickBank transaction for the account and date range. A transaction whose code matches a link is filed under that link's brand and offer. Anything else is kept at client level as unmatched.
+- A transaction is stored once. Re-running an import skips transactions already stored; repeated rebills on one receipt are kept separately.
+- Only the owner and operators can import, and only for the client whose ClickBank key is on the server. Client roles cannot see the connection, so the import is refused before ClickBank is called.
+- No customer personal data is stored.
+
+### What was verified
+
+| Check | Result |
+| --- | --- |
+| Type check, 78 unit tests, production build | Pass |
+| Database tests: access, site, and results rules | Pass on PostgreSQL 16, with `0004` applied twice |
+| Tests fail when the protection is removed | Shown for 7 database rules and 2 unit-level rules |
+| End to end in a real browser | Not done for this increment |
+| Against your Supabase project | Migration applied; all 8 verify checks read "ok" |
+| Against ClickBank | Not verified. The live import is untested until a real sale exists. |
 
 ## Increment 3: the public site, pages, and tracked links
 
@@ -129,7 +166,7 @@ Scoring engine (needs Node 20 or later):
 
 ```bash
 npm install
-npm test          # 43 tests
+npm test          # 78 tests
 npm run typecheck
 ```
 
@@ -139,7 +176,7 @@ Database access rules (needs a local PostgreSQL and a superuser):
 ./scripts/test-db.sh
 ```
 
-The script creates a scratch database, applies the schema, and runs the tests. A final line reading `ALL ACCESS RULE TESTS PASSED` means every rule held.
+The script creates scratch databases, applies the schema, and runs the tests. Three lines reading `ALL ACCESS RULE TESTS PASSED`, `ALL SITE RULE TESTS PASSED`, and `ALL RESULTS RULE TESTS PASSED` mean every rule held.
 
 To apply the schema to Supabase, run `supabase/migrations/0001_core.sql` in the SQL editor or with the Supabase CLI. The files `local_bootstrap.sql` and `local_grants.sql` are only for local testing; Supabase provides those pieces itself.
 
@@ -177,10 +214,17 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 | O-05 | Unapproved offers cannot be used | Met; tested |
 | O-06 | Links store channel, campaign, creative | Table in place; link generation comes next |
 | O-08 | Shows what is missing; provisional until terms recorded | Scoring side met; the intake screen comes next |
+| P-01 | Sales imported and matched to tracked links by tracking code | Partly met: manual import, tested on sample responses. The daily schedule comes later. Untested against live sales. |
+| P-01 | Re-running an import does not duplicate rows | Met; tested at the database |
+| P-01 | No customer personal data stored | Met; tested |
+| P-02 | Clicks, sales, gross, refunded, net, EPC, and conversion rate per offer | Met; tested |
+| P-02 | Refunds and chargebacks reduce net commission whether sent negative or positive | Met; tested |
+| P-03 | A client sees only their own results | Met; tested at the database |
+| P-03 | Results limited to the chosen date range | Met by the page's date filter; not covered by an automated test |
 
 ## Not built yet
 
 - The agent that drafts offer pages and articles (S-02, R-02). Pages are written by hand for now, from a starting structure.
-- The ClickBank sales import and the results dashboard (P-01 to P-03).
+- A daily automatic ClickBank import (P-01). The import is a button for now.
 - Screens for creating clients and brands, and for editing scoring weights. These are done in SQL for now.
 - Paid campaigns (Slice 2).

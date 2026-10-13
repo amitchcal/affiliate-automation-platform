@@ -12,9 +12,13 @@ run_suite() {
   $PSQL -d "$db" -f supabase/tests/local_bootstrap.sql >/dev/null
   $PSQL -d "$db" -f supabase/migrations/0001_core.sql >/dev/null
   $PSQL -d "$db" -f supabase/migrations/0003_site.sql >/dev/null
+  $PSQL -d "$db" -f supabase/migrations/0004_results.sql >/dev/null
+  # A second run proves 0004 is safe to apply twice.
+  $PSQL -d "$db" -f supabase/migrations/0004_results.sql >/dev/null
   $PSQL -d "$db" -f supabase/tests/local_grants.sql >/dev/null
   $PSQL -d "$db" -f "$test_file" | grep -v "^ *$" | grep -E "PASSED|ERROR" || true
 }
 
-run_suite map_test_access supabase/tests/access_rules.sql
-run_suite map_test_site supabase/tests/site_rules.sql
+run_suite map_test_access  supabase/tests/access_rules.sql
+run_suite map_test_site    supabase/tests/site_rules.sql
+run_suite map_test_results supabase/tests/results_rules.sql

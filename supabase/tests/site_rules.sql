@@ -138,9 +138,11 @@ begin
   if page.body <> 'Body of the overview.' then raise exception 'S-03: visitors see unpublished draft text'; end if;
   if page.cta_link <> 'offer-a' then raise exception 'S-07: page has no site link'; end if;
 
-  -- S-07: a click is recorded and the destination returned.
+  -- S-07: a click is recorded and the destination returned with ?tid= appended.
   destination := record_click('brand-a.test', 'offer-a', 'offer-a', 'pinterest.com');
-  if destination <> 'https://seller.test/hop' then raise exception 'S-07: wrong destination'; end if;
+  if destination not like 'https://seller.test/hop?tid=________' then
+    raise exception 'S-07: wrong destination (got %)', destination;
+  end if;
   if record_click('brand-a.test', 'no-such-link') is not null then raise exception 'S-07: unknown link returned a destination'; end if;
   if (select count(*) from click_events) <> 0 then raise exception 'T-02: a visitor can read click records'; end if;
 end $$;

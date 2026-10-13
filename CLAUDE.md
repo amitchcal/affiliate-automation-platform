@@ -2,7 +2,7 @@
 
 This file gives Claude Code the context for this repository. Read it before making changes. It records what the product is, what has been decided, what is built, and how work is expected to be done.
 
-Last updated: 5 October 2026, after increment 3.
+Last updated: 5 October 2026, after increment 4.
 
 ## What this product is
 
@@ -59,16 +59,18 @@ Do not put a product's price on a page. Link to the seller for the current price
 | 1 | Schema with row-level security, approval and audit triggers, offer scoring engine | Done, verified on the owner's Supabase project |
 | 2 | Sign-in, client and brand screens, niche and platform choice, offer intake, scoring, approvals | Done, verified on the owner's Supabase project |
 | 3 | Compliance templates, site pages with draft and publish, wording check, public brand site by domain, tracked links with click recording | Done, tested end to end locally. Owner still to run `0003_site.sql` and the walkthrough |
+| 4 | ClickBank sales import (P-01 partial), combined metrics per offer (P-02), results dashboard per brand with date range (P-03) | Done; unit and database tests pass on PostgreSQL 16. `0004_results.sql` applied on the owner's Supabase project and all 8 `verify_results.sql` checks read ok. Live import path untested until the first real sale exists. |
 
 ### Layout
 
 ```
-supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql
-supabase/tests/        access_rules.sql, site_rules.sql, local_bootstrap.sql, local_grants.sql
-supabase/verify.sql, verify_site.sql      checks to run in the Supabase SQL editor
-scripts/test-db.sh     runs the database tests on a local PostgreSQL
+supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql, 0004_results.sql
+supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, local_bootstrap.sql, local_grants.sql
+supabase/verify.sql, verify_site.sql, verify_results.sql   checks to run in the Supabase SQL editor
+scripts/test-db.sh     runs the database tests on a local PostgreSQL (or in a postgres:16 Docker container)
 src/scoring/           scoring engine: config.ts, score.ts
-src/lib/               scoring-config, offers, markdown, compliance, site, public-site, supabase clients
+src/lib/               scoring-config, offers, markdown, compliance, site, public-site, clickbank (server only), results, supabase clients
+docs/                  user-stories.md, how-it-works.md (plain-language explanation, updated every increment)
 src/middleware.ts      routing by domain, and sessions
 src/app/login          sign-in
 src/app/(app)/         the application, behind sign-in
@@ -79,7 +81,7 @@ src/app/site/[host]/   the public brand site
 
 ```bash
 npm install
-npm test            # unit tests (43)
+npm test            # unit tests (78)
 npm run typecheck
 npm run build
 npm run dev
@@ -94,6 +96,8 @@ npm run dev
 NEXT_PUBLIC_SUPABASE_URL=https://ktucieqhbkqktomigrsz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ADMIN_HOSTS=localhost,127.0.0.1        # optional; *.vercel.app is always an admin host
+CLICKBANK_API_KEY=<ClickBank API key>  # temporary; per-brand credentials go in the connections table (C-05) when that screen is built.
+                                       # The connection row with secret_ref 'env:CLICKBANK_API_KEY' names the one client this key belongs to.
 ```
 
 The service role key is not used yet. When agents need it, it goes in server-only environment variables and is never exposed to the browser or committed.
@@ -112,6 +116,10 @@ The service role key is not used yet. When agents need it, it goes in server-onl
 - An offer page needs an approved offer.
 - Offer pages and articles need all four standard pages published first.
 - Scoring weights must total 100.
+- Every tracked link has a globally unique 8-character tracking code; the click redirect adds it as `tid`.
+- An imported transaction (network, receipt, type, time) is stored once.
+- Only the owner and operators can write sales; client roles read their own client's sales only.
+- The server's ClickBank key can be assigned to only one client.
 - Changes to configuration, offers, rules, connections, and page publishing are written to `audit_log`, which cannot be updated or deleted.
 
 ## Offer scoring
@@ -198,9 +206,9 @@ Totals: 68 stories; 41 Must, 19 Should, 8 Could.
 | R-02 | Agent drafts articles | Must | Not started: articles are written by hand |
 | R-03 | Pins and scripts from each article | Should | Not started |
 | R-04 | Scheduled social posting | Could | Not started |
-| P-01 | Import sales and commissions from the network | Must | Not started: next |
-| P-02 | Spend and revenue combined per brand and offer | Must | Not started: next |
-| P-03 | Dashboard filtered by brand, date, and role | Must | Not started: next. Click counts exist per link |
+| P-01 | Import sales and commissions from the network | Must | Partial: manual import button on the results page; daily schedule is future work. Untested against live sales. |
+| P-02 | Spend and revenue combined per brand and offer | Must | Done |
+| P-03 | Dashboard filtered by brand, date, and role | Must | Done: per-brand results page with date range selector |
 | P-04 | Weekly written summary | Should | Not started |
 | P-05 | Summary emailed to client | Should | Not started |
 | P-06 | CSV export | Could | Not started |

@@ -1,16 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getClientUnmatched } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ClientPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;
   const supabase = await createClient();
-  const { data: client } = await supabase
-    .from("clients")
-    .select("id, name, brands(id, name, domain, niche)")
-    .eq("id", clientId)
-    .maybeSingle();
+
+  const [{ data: client }, unmatched] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name, brands(id, name, domain, niche)")
+      .eq("id", clientId)
+      .maybeSingle(),
+    getClientUnmatched(supabase, clientId),
+  ]);
   if (!client) notFound();
+
+  const unmatchedNet = unmatched.netCommission;
+  const hasUnmatched = unmatched.records > 0;
 
   return (
     <main className="stack">
@@ -19,7 +27,7 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
           <Link href="/clients">Clients</Link>
         </p>
         <h1>{client.name}</h1>
-        <p className="lede">Choose a brand to set its niche and score its offers.</p>
+        <p className="lede">Choose a brand to set its niche, score its offers, and view results.</p>
       </div>
       {client.brands.length > 0 ? (
         <ul className="rows">
@@ -38,6 +46,27 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
       ) : (
         <p className="panel empty">This client has no brands yet.</p>
       )}
+      {hasUnmatched ? (
+        <section className="stack" aria-labelledby="unmatched">
+          <div>
+            <h2 id="unmatched">Unmatched commissions</h2>
+            <p className="lede">
+              These sales were imported but their ClickBank tracking code did not match any tracked
+              link. They may belong to a deleted link, an untracked test, or another site on the
+              same account. Net:{" "}
+              <strong>
+                {unmatchedNet.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  minimumFractionDigits: 2,
+                })}
+              </strong>{" "}
+              across {unmatched.records} record{unmatched.records === 1 ? "" : "s"} (all time,
+              test orders excluded from the total).
+            </p>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
