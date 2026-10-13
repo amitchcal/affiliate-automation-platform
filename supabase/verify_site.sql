@@ -26,4 +26,4 @@ select 'visitors can call the public functions',
 union all
 select 'brand found by its domain',
        case when count(*) = 1 then 'ok' else 'found ' || count(*) end
-from public_brand('www.affiqube.com');
+from public_brand('www.affilyvault.com');

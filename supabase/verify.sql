@@ -16,10 +16,10 @@ select 'owner exists', case when count(*) = 1 then 'ok' else 'found ' || count(*
 from memberships where role = 'owner'
 union all
 select 'first brand exists', case when count(*) = 1 then 'ok' else 'found ' || count(*) end
-from brands where domain = 'affiqube.com'
+from brands where name = 'AffilyVault' and domain = 'affilyvault.com'
 union all
 select 'approval settings', case when count(*) = 4 then 'ok' else 'found ' || count(*) end
-from approval_settings
+from approval_settings where brand_id = '22222222-2222-4222-8222-222222222222'
 union all
 select 'default scoring weights total 100',
        case when weights_total(weights) = 100 then 'ok' else 'total ' || weights_total(weights) end
