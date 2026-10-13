@@ -2,18 +2,66 @@
 
 This file gives Claude Code the context for this repository. Read it before making changes. It records what the product is, what has been decided, what is built, and how work is expected to be done.
 
-Last updated: 5 October 2026, after increment 4.
+Last updated: 13 October 2026, architecture section added before increment 5.
 
 ## What this product is
 
-A multi-tenant platform that runs affiliate and digital marketing for several brands and clients. Agents do the work; people set the limits in configuration and approve what matters.
+Affiqube is a multi-tenant platform that runs digital marketing for several brands and clients, for two kinds of business: affiliate marketing and dropshipping. A shared core serves both, and each business type is a module (see "Architecture" below). Agents do the work; people set the limits in configuration and approve what matters.
 
 - **Owner:** Amit Chakraborty, trading as Vividha Marketing (Kolkata, India).
 - **Purpose:** first to run Amit's own brands, then to deliver digital marketing as a service to other clients.
-- **First client:** Amit himself. Client "Vividha Marketing", brand "AffiQube" on `affiqube.com`, US audience, software and productivity niche.
-- **Why it exists:** each extra Shopify store costs a monthly fee, and an affiliate site uses little of what Shopify offers. This platform hosts content and affiliate brands itself. Shopify stays for dropshipping only.
+- **First client:** Amit himself. Client "Vividha Marketing", with two test brands: AffilyVault (affiliate marketing, `affilyvault.com`) and Famperia (dropshipping, `famperia.com`). See "Test brands" below. Until increment 5's migration is applied, the database still holds the earlier seeded brand AffiQube on `affiqube.com`.
+- **Why it exists:** each extra Shopify store costs a monthly fee, and an affiliate site uses little of what Shopify offers. The platform hosts affiliate brand sites itself, and manages dropshipping brands whose stores stay on Shopify.
 
-A separate Shopify store, AffilyVault (`affilyvault.com`), was built by hand before this platform. It is not in this repository. It is the reference for how a compliant affiliate site should read, and may move onto the platform later.
+AffilyVault was first built by hand as a Shopify store. It remains the reference for how a compliant affiliate site should read, and its pages move onto the platform under S-12.
+
+## Architecture: one platform, a shared core, two modules
+
+Decided 13 October 2026. This section overrides anything earlier in this file that describes the platform as affiliate-only.
+
+Affiqube is one product with one codebase, one database, and one deployment. It serves two kinds of business through modules:
+
+| Layer | Holds | Workstream in the story bank |
+| --- | --- | --- |
+| Core | Clients, brands, roles, audit log, configuration, budgets and approvals, scoring engine, brand setup wizard, creatives, campaigns, guardrails, email, reporting, currency | Core |
+| Affiliate module | Offers, seller rules records, platform-hosted brand sites, tracked links, affiliate network imports | Affiliate |
+| Dropshipping module | Suppliers, products, research records, pricing and margin, product compliance, listings, store orders, fulfilment, returns, store payouts | Dropshipping |
+
+### Rules
+
+1. **Core never depends on a module.** Core code must not import from `src/modules/*`, and core tables must not reference module tables. Modules plug into core through defined extension points: the brand's revenue source, its item type (offer or product), its profit calculation, and its wizard steps.
+2. **Modules never depend on each other.** Anything both need moves into core.
+3. **Each brand's business type switches its modules on (story T-07).** The type is Affiliate marketing, Dropshipping, or Both. Screens, wizard steps, server actions, and agents of a disabled module are hidden from the interface and refused on the server.
+4. **Layout.**
+   - `src/core/` for core logic and screens
+   - `src/modules/affiliate/` and `src/modules/dropshipping/` for each module
+   - Database tables for a module carry its prefix (`aff_`, `ds_`). Existing affiliate tables are renamed only through a new migration, never by editing an applied one.
+5. **Tests follow the layers.** Each module has its own tests. A test must prove that a brand without a module is refused that module's actions.
+6. **Shared stories are verified on both test brands.** A Core story is finished only when walked through on AffilyVault and on Famperia. Record this in the Verified columns of the story bank.
+
+### Brand setup wizard
+
+A brand is created with only a name, a logo, and a business type (W-01). Everything else is collected by a guided wizard whose steps come from the core list plus the steps of each enabled module (W-02). Every answer saves to the server as it is entered, and the wizard reopens at the last incomplete step on any device (W-03). Each module registers its own wizard steps; core owns the wizard engine. The step list is in the "Wizard steps" sheet of the story bank.
+
+### Test brands
+
+| Brand | Business type | Storefront | Notes |
+| --- | --- | --- | --- |
+| AffilyVault, affilyvault.com | Affiliate marketing | Shopify today; pages move onto the platform under S-12 | Until S-12, tracked links can run on a subdomain such as `go.affilyvault.com` |
+| Famperia, famperia.com | Dropshipping | Shopify, a separate store | Home decoration niche |
+
+The seeded test brand named AffiQube on affiqube.com is replaced. `affiqube.com` is the platform's own host, not a brand.
+
+### Build order
+
+The story bank's Release column is the plan, with this correction decided on 13 October 2026:
+
+- **Increment 5:** move existing code into `src/core` and `src/modules/affiliate`, rename the application to Affiqube, replace the seeded brand with the two test brands, and add module entitlement (T-07). Plan: `docs/plans/increment-5-plan.md`.
+- **Increment 6:** client admin invites own users (T-03) and two-factor sign-in for admin roles (T-05). This completes Epic 1.
+- **After that:** start-a-brand (W-01), save-and-resume (W-03), and the brand profile (C-01).
+- **Later, its own increment:** rename existing affiliate tables to the `aff_` prefix through a new migration.
+
+The full release list is in `docs/user-stories.md` under "Release plan".
 
 ## Decisions already made
 
@@ -33,9 +81,9 @@ Do not reopen these without the owner asking.
 | Affiliate network | ClickBank first. The owner's affiliate nickname is `vividham` |
 | Language | American English on public sites (US audience) |
 
-## Compliance rules
+## Compliance rules for affiliate content
 
-These take priority over conversion. They come from ClickBank's promotional guidelines and US advertising rules, and they apply to every page and ad an agent writes.
+These take priority over conversion. They come from ClickBank's promotional guidelines and US advertising rules, and they apply to every page and ad an agent writes for an affiliate brand. Product compliance for dropshipping brands (product safety, claims, and listings) is a separate set of stories in the Dropshipping workstream and is not covered here.
 
 1. Disclose the affiliate relationship clearly, on the page and near the links.
 2. No fake reviews or testimonials. Pages are overviews based on the seller's published information, and say so, unless the product was really used.
@@ -147,7 +195,7 @@ The lesson behind the model: low-payout affiliate offers do not cover the cost o
 
 Story IDs are stable. Reference them in commits, code comments, and tests. The full story bank, with acceptance tests, should be saved as `docs/user-stories.md`.
 
-Totals: 68 stories; 41 Must, 19 Should, 8 Could.
+The story bank of 13 October 2026 in `docs/user-stories.md` adds the dropshipping, wizard, and other new stories with their workstream and release. The table below covers the stories built or started so far; for totals and stories not listed, see the story bank.
 
 | ID | Story | Priority | Status |
 | --- | --- | --- | --- |
@@ -157,6 +205,7 @@ Totals: 68 stories; 41 Must, 19 Should, 8 Could.
 | T-04 | Owner master access with client switcher | Must | Done |
 | T-05 | Two-factor sign-in for admin roles | Should | Not started |
 | T-06 | Audit log of publishing and spending actions | Must | Done |
+| T-07 | Business type switches a brand's modules on | Must | Not started (increment 5) |
 | C-01 | Brand profile | Must | Partial: business details and headline; no colours, logo, voice |
 | C-02 | Budget caps per brand and campaign | Must | Not started (Slice 2) |
 | C-03 | Rules record per offer | Must | Done in the database; no screen for rule text or banned claims |
@@ -222,12 +271,7 @@ Totals: 68 stories; 41 Must, 19 Should, 8 Could.
 
 ## What to build next
 
-In this order, unless the owner says otherwise.
-
-1. **Increment 4: results.** ClickBank sales import (P-01), matched to tracked links by the tracking parameters on each link; combined metrics per offer and channel (P-02); a dashboard limited by role (P-03). Read-only, so no spend risk. The owner has ClickBank API access; keys go in server environment variables.
-2. **Increment 5: drafting agent.** An agent that drafts an offer page (S-02) and articles (R-02) from the seller's published facts and the offer's rules record, saves them as drafts, and never publishes without the approval mode allowing it. Add the screen for rule text and banned claims (C-03) first, since the agent depends on it.
-3. **Increment 6: management screens.** Create clients and brands (S-01), edit scoring weights (C-08), fuller brand profile (C-01).
-4. **Slice 2: paid campaigns.** Budget caps, ad copy and designs, Meta campaigns, guardrails. Needs Meta API access, which the owner must apply for; it takes time.
+Follow "Build order" in the architecture section and the release plan in `docs/user-stories.md`. The earlier affiliate-only order (drafting agent as increment 5, management screens as increment 6) is replaced: the drafting agent and offer rules screen are now release R3, and Meta campaigns are R8.
 
 ## How to work in this repository
 
