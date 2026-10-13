@@ -14,7 +14,7 @@ Columns: Aff and Drop = applicable to each business; Workstream = Core, Affiliat
 | T-04 | As the owner, I want master access with a client switcher, so that I can work across all clients from one login. | Yes | Yes | Core | Must | Done | R0 | The owner can open any client's brands without a separate account. |
 | T-05 | As the owner, I want two-factor sign-in for admin roles, so that a stolen password is not enough. | Yes | Yes | Core | Should | Not started | R10 | Owner and client admin logins require a second factor. |
 | T-06 | As the owner, I want an audit log of every action that publishes or spends, so that I can trace what an agent or person did. | Yes | Yes | Core | Must | Done | R0 | Each entry records actor, time, action, and before and after values. |
-| T-07 | As the owner, I want each brand's business type to switch its modules on, so that a brand sees only the features its business uses. | Yes | Yes | Core | Must | Not started | R1 | Business type is Affiliate marketing, Dropshipping, or Both; it enables the matching modules for that brand; screens, wizard steps, and agents of a disabled module are hidden and refused; changing the type is logged and re-runs the wizard for the new steps. |
+| T-07 | As the owner, I want each brand's business type to switch its modules on, so that a brand sees only the features its business uses. | Yes | Yes | Core | Must | Partial: built in increment 5; the wizard re-run waits for W-02 | R1 | Business type is Affiliate marketing, Dropshipping, or Both; it enables the matching modules for that brand; screens, wizard steps, and agents of a disabled module are hidden and refused; changing the type is logged and re-runs the wizard for the new steps. |
 
 ## Epic 2: Configuration
 

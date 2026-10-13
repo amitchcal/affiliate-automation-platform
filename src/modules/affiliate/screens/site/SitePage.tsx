@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BrandNav } from "@/core/components/BrandNav";
 import { createClient } from "@/core/supabase/server";
 import { BusinessDetails, missingDetails } from "@/modules/affiliate/site/site";
-import { createArticle, createLink, createOfferPage, createStandardPages, saveDetails } from "./actions";
+import { createArticle, createLink, createOfferPage, createStandardPages } from "./actions";
 
 interface PageRow {
   id: string;
@@ -55,7 +54,7 @@ export default async function BrandSitePage({
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, client_id, name, domain, profile, clients(name)")
+    .select("id, domain, profile")
     .eq("id", brandId)
     .maybeSingle();
   if (!brand) notFound();
@@ -83,55 +82,18 @@ export default async function BrandSitePage({
   const content = pages.filter((page) => page.kind !== "standard");
   const offersWithoutPage = offers.filter((offer) => !pages.some((page) => page.offer_id === offer.id));
   const offerName = (id: string) => offers.find((offer) => offer.id === id)?.name ?? "Offer";
-  const clientName = (brand.clients as unknown as { name: string } | null)?.name ?? "Client";
   const previewBase = `/site/${brand.domain}`;
 
   return (
     <main className="stack">
-      <div>
-        <p className="crumbs">
-          <Link href="/clients">Clients</Link> / <Link href={`/clients/${brand.client_id}`}>{clientName}</Link>
-        </p>
-        <div className="split">
-          <h1>{brand.name}</h1>
-          <a href={previewBase} target="_blank" rel="noopener">
-            View the public site
-          </a>
-        </div>
-        <BrandNav brandId={brand.id} current="site" />
-      </div>
+      <p>
+        <a href={previewBase} target="_blank" rel="noopener">
+          View the public site
+        </a>
+      </p>
 
       {notice ? <p className="notice" role="status">{notice}</p> : null}
       {error ? <p className="error" role="alert">{error}</p> : null}
-
-      <section className="stack" aria-labelledby="details">
-        <div>
-          <h2 id="details">Business details</h2>
-          <p className="lede">These fill the disclosure, privacy, terms, and contact pages.</p>
-        </div>
-        <form action={saveDetails} className="panel grid">
-          <input type="hidden" name="brand_id" value={brand.id} />
-          <label>
-            Operator name <span className="hint">The business that runs this site.</span>
-            <input type="text" name="operator" defaultValue={profile.operator ?? ""} />
-          </label>
-          <label>
-            Contact email
-            <input type="email" name="email" defaultValue={profile.email ?? ""} />
-          </label>
-          <label className="wide">
-            Address
-            <input type="text" name="address" defaultValue={profile.address ?? ""} />
-          </label>
-          <label className="wide">
-            Home page headline <span className="hint">One line saying what the site offers.</span>
-            <input type="text" name="tagline" defaultValue={profile.tagline ?? ""} />
-          </label>
-          <div className="wide">
-            <button type="submit">Save business details</button>
-          </div>
-        </form>
-      </section>
 
       <section className="stack" aria-labelledby="standard">
         <div>
@@ -145,7 +107,10 @@ export default async function BrandSitePage({
           <form action={createStandardPages} className="panel">
             <input type="hidden" name="brand_id" value={brand.id} />
             {missing.length > 0 ? (
-              <p>Add the {missing.join(", ")} above, then create the pages.</p>
+              <p>
+                Add the {missing.join(", ")} under Business details on the{" "}
+                <Link href={`/brands/${brand.id}`}>brand's Overview</Link>, then create the pages.
+              </p>
             ) : (
               <p>Creates the pages as drafts for you to review.</p>
             )}

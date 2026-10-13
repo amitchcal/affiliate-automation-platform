@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
 import { importForClient, importNotice } from "@/modules/affiliate/results/clickbank";
+import { requireAffiliate } from "@/modules/affiliate/guard";
 
 function back(path: string, kind: "notice" | "error", message: string): never {
   redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
@@ -20,6 +21,7 @@ export async function importSales(formData: FormData) {
   if (!startDate || !endDate) back(path, "error", "Choose a start and end date.");
 
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
   const { data: brand } = await supabase
     .from("brands")
     .select("id, client_id")

@@ -1,8 +1,8 @@
-# Marketing Automation Platform: project context
+# Affiqube: project context
 
 This file gives Claude Code the context for this repository. Read it before making changes. It records what the product is, what has been decided, what is built, and how work is expected to be done.
 
-Last updated: 13 October 2026, architecture section added before increment 5.
+Last updated: 13 October 2026, during increment 5 (application code built, awaiting the owner's walkthrough).
 
 ## What this product is
 
@@ -10,7 +10,7 @@ Affiqube is a multi-tenant platform that runs digital marketing for several bran
 
 - **Owner:** Amit Chakraborty, trading as Vividha Marketing (Kolkata, India).
 - **Purpose:** first to run Amit's own brands, then to deliver digital marketing as a service to other clients.
-- **First client:** Amit himself. Client "Vividha Marketing", with two test brands: AffilyVault (affiliate marketing, `affilyvault.com`) and Famperia (dropshipping, `famperia.com`). See "Test brands" below. Until increment 5's migration is applied, the database still holds the earlier seeded brand AffiQube on `affiqube.com`.
+- **First client:** Amit himself. Client "Vividha Marketing", with two test brands: AffilyVault (affiliate marketing, `affilyvault.com`) and Famperia (dropshipping, `famperia.com`). See "Test brands" below. Migration 0005 renamed the earlier seeded brand AffiQube to AffilyVault (same id) and added Famperia.
 - **Why it exists:** each extra Shopify store costs a monthly fee, and an affiliate site uses little of what Shopify offers. The platform hosts affiliate brand sites itself, and manages dropshipping brands whose stores stay on Shopify.
 
 AffilyVault was first built by hand as a Shopify store. It remains the reference for how a compliant affiliate site should read, and its pages move onto the platform under S-12.
@@ -96,7 +96,7 @@ These take priority over conversion. They come from ClickBank's promotional guid
 
 Each seller also has its own rules, stored per offer in `offer_rules`. Example already met: one seller forbids bidding on its brand name in paid search and forbids a Facebook page named after the product.
 
-In code: `src/lib/compliance.ts` checks wording before publishing. It is a first line of defence, not legal review. Extend it; do not weaken it. Standard pages are exempt because they are the compliance text itself.
+In code: `src/core/compliance/compliance.ts` checks wording before publishing. It is a first line of defence, not legal review. Extend it; do not weaken it. Standard pages are exempt because they are the compliance text itself.
 
 Do not put a product's price on a page. Link to the seller for the current price.
 
@@ -108,28 +108,43 @@ Do not put a product's price on a page. Link to the seller for the current price
 | 2 | Sign-in, client and brand screens, niche and platform choice, offer intake, scoring, approvals | Done, verified on the owner's Supabase project |
 | 3 | Compliance templates, site pages with draft and publish, wording check, public brand site by domain, tracked links with click recording | Done, tested end to end locally. Owner still to run `0003_site.sql` and the walkthrough |
 | 4 | ClickBank sales import (P-01 partial), combined metrics per offer (P-02), results dashboard per brand with date range (P-03) | Done; unit and database tests pass on PostgreSQL 16. `0004_results.sql` applied on the owner's Supabase project and all 8 `verify_results.sql` checks read ok. Live import path untested until the first real sale exists. |
+| 5 | Code split into core and the affiliate module; renamed Affiqube; AffiQube seed renamed AffilyVault and Famperia added; module entitlement by business type (T-07); every row's client matches its parents (0006) | Built. 90 unit tests and five database suites pass on PostgreSQL 16. 0005 applied on Supabase, all 15 `verify_modules.sql` rows ok. 0006 applied on Supabase, all 6 `verify_consistency.sql` rows ok. Application code committed; owner walkthrough of the screens pending. |
 
 ### Layout
 
 ```
-supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql, 0004_results.sql
-supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, local_bootstrap.sql, local_grants.sql
-supabase/verify.sql, verify_site.sql, verify_results.sql   checks to run in the Supabase SQL editor
+supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql, 0004_results.sql,
+                       0005_modules_and_test_brands.sql, 0006_client_consistency.sql
+supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, consistency_rules.sql, module_rules.sql,
+                       local_bootstrap.sql, local_grants.sql
+supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency
 scripts/test-db.sh     runs the database tests on a local PostgreSQL (or in a postgres:16 Docker container)
-src/scoring/           scoring engine: config.ts, score.ts
-src/lib/               scoring-config, offers, markdown, compliance, site, public-site, clickbank (server only), results, supabase clients
-docs/                  user-stories.md, how-it-works.md (plain-language explanation, updated every increment)
+docs/                  user-stories.md, how-it-works.md (plain-language explanation, updated every increment), plans/
+src/core/              shared by every business type; never imports a module
+  modules.ts           business types, module definitions, brand tabs, refusal wording (T-07)
+  brand-access.ts      server-side check that a brand has a module (server only)
+  scoring/             scoring engine (config, score) and scoring-config loading
+  compliance/          wording check (K-05)
+  content/             Markdown renderer
+  supabase/            server and public clients
+  components/          BrandNav (tabs passed in)
+  screens/             clients list, brand overview and its actions
+src/modules/affiliate/ offers, site, public-site, results (clickbank server only), screens, guard.ts, module.ts
+src/modules/dropshipping/  module.ts only, until release R5
+src/modules/index.ts   the list of modules; read only by src/app
+src/app/               routes only: short entry points that compose core and modules
+  (app)/brands/[brandId]/layout.tsx              brand header and module tabs
+  (app)/brands/[brandId]/(affiliate)/layout.tsx  guard for every affiliate screen
+  site/[host]/         the public brand site (affiliate module)
+src/architecture.test.ts  fails if core imports a module or modules import each other
 src/middleware.ts      routing by domain, and sessions
-src/app/login          sign-in
-src/app/(app)/         the application, behind sign-in
-src/app/site/[host]/   the public brand site
 ```
 
 ### Commands
 
 ```bash
 npm install
-npm test            # unit tests (78)
+npm test            # unit tests (90)
 npm run typecheck
 npm run build
 npm run dev
@@ -152,9 +167,9 @@ The service role key is not used yet. When agents need it, it goes in server-onl
 
 ### How the public site is served
 
-- On an admin host, the application is served, and a brand's site can be previewed at `/site/<domain>`.
+- On an admin host, the application is served, and a brand's site can be previewed at `/site/<domain>`. Admin hosts are `affiqube.com` (the platform's own domain), localhost, `*.vercel.app`, and anything in `ADMIN_HOSTS`.
 - On any other host, the request is treated as a brand's own domain and its site is served from the root.
-- Visitors have no table access. They use four `SECURITY DEFINER` functions: `public_brand`, `public_pages`, `public_page`, `record_click`.
+- Visitors have no table access. They use four `SECURITY DEFINER` functions: `public_brand`, `public_pages`, `public_page`, `record_click`. Each serves only brands with the affiliate module.
 
 ### Rules enforced in the database
 
@@ -168,11 +183,14 @@ The service role key is not used yet. When agents need it, it goes in server-onl
 - An imported transaction (network, receipt, type, time) is stored once.
 - Only the owner and operators can write sales; client roles read their own client's sales only.
 - The server's ClickBank key can be assigned to only one client.
+- A brand without the affiliate module cannot have offers, offer figures, rules records, tracked links, or site pages added or changed; deletes are allowed (T-07).
+- Only the owner and operators can change a brand's business type; each change is audited.
+- Every row's `client_id` matches the client of the brand, offer, and link it points to (composite foreign keys, 0006). A sale keeps its client when its brand, offer, or link is deleted.
 - Changes to configuration, offers, rules, connections, and page publishing are written to `audit_log`, which cannot be updated or deleted.
 
 ## Offer scoring
 
-`scoreOffer` in `src/scoring/score.ts` returns a score out of 100, a break-even cost per click, a channel (`paid`, `organic`, `reject`, `needs_data`), and a plain-language explanation.
+`scoreOffer` in `src/core/scoring/score.ts` returns a score out of 100, a break-even cost per click, a channel (`paid`, `organic`, `reject`, `needs_data`), and a plain-language explanation.
 
 | Parameter | Weight | Source |
 | --- | --- | --- |
@@ -205,7 +223,7 @@ The story bank of 13 October 2026 in `docs/user-stories.md` adds the dropshippin
 | T-04 | Owner master access with client switcher | Must | Done |
 | T-05 | Two-factor sign-in for admin roles | Should | Not started |
 | T-06 | Audit log of publishing and spending actions | Must | Done |
-| T-07 | Business type switches a brand's modules on | Must | Not started (increment 5) |
+| T-07 | Business type switches a brand's modules on | Must | Partial: built in increment 5; walkthrough pending; the wizard re-run waits for W-02 |
 | C-01 | Brand profile | Must | Partial: business details and headline; no colours, logo, voice |
 | C-02 | Budget caps per brand and campaign | Must | Not started (Slice 2) |
 | C-03 | Rules record per offer | Must | Done in the database; no screen for rule text or banned claims |

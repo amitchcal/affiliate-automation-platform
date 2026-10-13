@@ -1,8 +1,44 @@
-# Marketing Automation Platform
+# Affiqube
 
-Increments 1 to 4 of Slice 1: the data model with access rules, the offer scoring engine, the application for choosing a niche and scoring offers, the public brand site with compliant pages and tracked links, and results from ClickBank sales.
+One platform for running affiliate marketing and dropshipping brands: a shared core, plus one module per kind of business. Increments 1 to 4 built the data model with access rules, the offer scoring engine, the application, the public brand site with compliant pages and tracked links, and results from ClickBank sales. Increment 5 split the code into core and modules and switched each brand's modules on by its business type.
 
-Story IDs refer to the story bank, "Marketing Automation Platform: User Stories". A plain-language explanation of the whole product is in `docs/how-it-works.md`.
+Story IDs refer to the story bank in `docs/user-stories.md`. The architecture rules are in `CLAUDE.md`. A plain-language explanation of the whole product is in `docs/how-it-works.md`.
+
+## Increment 5: module split, test brands, module entitlement
+
+Plan and decisions: `docs/plans/increment-5-plan.md`.
+
+| File | What it does | Stories |
+| --- | --- | --- |
+| `src/core/`, `src/modules/affiliate/` | Existing code moved into core and the affiliate module. Route files in `src/app` are short entry points. | Architecture |
+| `src/core/modules.ts` | Business types, which modules each switches on, brand tabs, plain-language refusal | T-07 |
+| `src/core/brand-access.ts`, `src/modules/affiliate/guard.ts` | Server-side check that a brand has a module; every affiliate action calls it first | T-07 |
+| `src/modules/affiliate/module.ts`, `src/modules/dropshipping/module.ts`, `src/modules/index.ts` | Each module describes its tabs; only `src/app` reads the list | T-07 |
+| `src/core/screens/BrandOverview.tsx` | Brand overview: business type, niche and platforms, business details | T-07, O-01, O-07, C-01 |
+| `src/app/(app)/brands/[brandId]/layout.tsx` | Shared brand header with the tabs of the brand's modules | T-07 |
+| `src/app/(app)/brands/[brandId]/(affiliate)/layout.tsx` | One guard for every affiliate screen | T-07 |
+| `src/architecture.test.ts` | Fails if core imports a module or one module imports another | Architecture |
+| `supabase/migrations/0005_modules_and_test_brands.sql` | Business type, `brand_has_module()`, database refusal of affiliate writes, public site limited to affiliate brands, type changes audited, AffiQube renamed AffilyVault, Famperia added | T-07, T-06 |
+| `supabase/migrations/0006_client_consistency.sql` | Every row's client matches its brand, offer, and link, enforced by composite foreign keys | T-01, T-02 |
+| `supabase/tests/module_rules.sql`, `supabase/tests/consistency_rules.sql` | Database tests for both migrations | T-07, T-01, T-02 |
+| `supabase/verify_modules.sql`, `supabase/verify_consistency.sql` | Checks to run in the Supabase SQL editor | T-07, T-01 |
+
+The offers list moved from `/brands/<id>` to `/brands/<id>/offers`. `/brands/<id>` is now the brand overview. Niche, platforms, and business details are edited there.
+
+### What was verified
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 90 passing: the 78 from increment 4, unchanged, plus 12 new |
+| Type check, production build | Pass |
+| Database tests on PostgreSQL 16 (Docker), 0005 and 0006 each applied twice | All five suites pass |
+| Sabotage: refusal trigger on offers dropped | `module_rules.sql` fails |
+| Sabotage: `offer_rules_offer_client_match` dropped | `consistency_rules.sql` fails |
+| Sabotage: core imports a module | `architecture.test.ts` fails |
+| 0005 on a copy shaped like the live project | Applied twice; `verify_modules.sql` as expected |
+| 0005 on the owner's Supabase project | Applied by the owner; all 15 `verify_modules.sql` rows ok |
+| 0006 on the owner's Supabase project | Applied by the owner; all 6 `verify_consistency.sql` rows ok |
+| Screens against live data | Not verified from the development machine, which cannot reach Supabase. Covered by the owner's walkthrough. |
 
 ## Increment 4: results
 
@@ -166,17 +202,17 @@ Scoring engine (needs Node 20 or later):
 
 ```bash
 npm install
-npm test          # 78 tests
+npm test          # 90 tests
 npm run typecheck
 ```
 
-Database access rules (needs a local PostgreSQL and a superuser):
+Database access rules (needs a local PostgreSQL and a superuser, or a `postgres:16` Docker container):
 
 ```bash
 ./scripts/test-db.sh
 ```
 
-The script creates scratch databases, applies the schema, and runs the tests. Three lines reading `ALL ACCESS RULE TESTS PASSED`, `ALL SITE RULE TESTS PASSED`, and `ALL RESULTS RULE TESTS PASSED` mean every rule held.
+The script creates scratch databases, applies the schema, and runs the tests. Five lines reading `ALL ACCESS RULE TESTS PASSED`, `ALL SITE RULE TESTS PASSED`, `ALL RESULTS RULE TESTS PASSED`, `ALL CONSISTENCY RULE TESTS PASSED`, and `ALL MODULE RULE TESTS PASSED` mean every rule held.
 
 To apply the schema to Supabase, run `supabase/migrations/0001_core.sql` in the SQL editor or with the Supabase CLI. The files `local_bootstrap.sql` and `local_grants.sql` are only for local testing; Supabase provides those pieces itself.
 
@@ -205,6 +241,12 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 | T-02 | A client login cannot read another client's rows, proven by a test | Met; tested |
 | T-04 | The owner can open any client's brands | Met; tested |
 | T-06 | Each entry records actor, time, action, before and after | Met; tested |
+| T-01, T-02 | A row cannot name one client while pointing at another client's brand, offer, or link | Met; tested at the database (0006) |
+| T-07 | Business type is Affiliate marketing, Dropshipping, or Both, and enables the matching modules | Met; tested |
+| T-07 | Screens of a disabled module are hidden | Met: tabs come from the brand's modules; affiliate screens show a plain refusal. Owner walkthrough pending. |
+| T-07 | Actions of a disabled module are refused on the server | Met: every affiliate action checks first, and the database refuses the writes; database part tested |
+| T-07 | Changing the type is logged | Met; tested |
+| T-07 | Changing the type re-runs the wizard for the new steps | Not yet: the wizard does not exist. Moves to W-02. |
 | C-03 | No approval without an approved rules record | Met; tested at the database. The content-generation check comes with the site module. |
 | C-05 | Secrets never reach the browser | Partly met: client roles cannot read connections. Vault storage comes with the first integration. |
 | C-06 | Approval mode per action type | Table in place; enforcement comes with the actions themselves |
@@ -227,4 +269,6 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 - The agent that drafts offer pages and articles (S-02, R-02). Pages are written by hand for now, from a starting structure.
 - A daily automatic ClickBank import (P-01). The import is a button for now.
 - Screens for creating clients and brands, and for editing scoring weights. These are done in SQL for now.
+- Any dropshipping screens. Famperia has the module switched on, but its screens arrive from release R5.
+- Renaming the affiliate tables to the `aff_` prefix. Its own increment later.
 - Paid campaigns (Slice 2).

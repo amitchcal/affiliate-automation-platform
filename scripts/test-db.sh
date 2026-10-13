@@ -29,3 +29,4 @@ run_suite map_test_access  supabase/tests/access_rules.sql
 run_suite map_test_site    supabase/tests/site_rules.sql
 run_suite map_test_results supabase/tests/results_rules.sql
 run_suite map_test_consistency supabase/tests/consistency_rules.sql
+run_suite map_test_modules supabase/tests/module_rules.sql

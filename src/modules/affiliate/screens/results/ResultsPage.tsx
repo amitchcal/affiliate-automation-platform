@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BrandNav } from "@/core/components/BrandNav";
 import { createClient } from "@/core/supabase/server";
 import { getBrandMetrics, OfferMetrics } from "@/modules/affiliate/results/results";
 import { importRefusal } from "@/modules/affiliate/results/clickbank";
@@ -44,7 +42,7 @@ export default async function ResultsPage({
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, client_id, name, domain, clients(name)")
+    .select("id, client_id")
     .eq("id", brandId)
     .maybeSingle();
   if (!brand) notFound();
@@ -68,18 +66,8 @@ export default async function ResultsPage({
   const totalConversions = sortedOffers.reduce((sum, o) => sum + o.conversions, 0);
   const totalNet = sortedOffers.reduce((sum, o) => sum + o.netCommission, 0);
 
-  const clientName = (brand.clients as unknown as { name: string } | null)?.name ?? "Client";
-
   return (
     <main className="stack">
-      <div>
-        <p className="crumbs">
-          <Link href="/clients">Clients</Link> / <Link href={`/clients/${brand.client_id}`}>{clientName}</Link>
-        </p>
-        <h1>{brand.name}</h1>
-        <BrandNav brandId={brand.id} current="results" />
-      </div>
-
       {sp.notice ? <p className="notice" role="status">{sp.notice}</p> : null}
       {sp.error ? <p className="error" role="alert">{sp.error}</p> : null}
 

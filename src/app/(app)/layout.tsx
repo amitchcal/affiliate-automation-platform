@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="shell">
       <header className="topbar">
         <Link href="/clients" className="brandmark">
-          Marketing Automation Platform
+          Affiqube
         </Link>
         <div className="who">
           <span>{user.email}</span>

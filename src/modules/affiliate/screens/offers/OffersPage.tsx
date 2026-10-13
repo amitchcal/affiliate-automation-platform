@@ -1,20 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
 import { loadScoringConfig } from "@/core/scoring/scoring-config";
 import { latestMetrics, MetricsRow, RulesRow, toOfferInput } from "@/modules/affiliate/offers/offers";
 import { PARAMETER_LABELS } from "@/core/scoring/config";
 import { Channel, scoreOffer } from "@/core/scoring/score";
-import { BrandNav } from "@/core/components/BrandNav";
-import { addOffer, approveOffer, approveRules, saveChoices } from "./actions";
-
-const PLATFORMS: { value: string; label: string; why: string }[] = [
-  { value: "articles", label: "Articles on the site", why: "Free. Suits offers that earn little per visitor. Slow to build, lasting once built." },
-  { value: "pinterest", label: "Pinterest", why: "Free. Strong for how-to, home, pet, and parenting topics." },
-  { value: "instagram", label: "Instagram", why: "Free. Short videos reach new people; one link in the profile." },
-  { value: "youtube", label: "YouTube", why: "Free. Best for demonstrations; takes more effort per piece." },
-  { value: "meta_ads", label: "Meta and Instagram ads", why: "Paid. Worth it only for offers marked Paid ads below." },
-];
+import { addOffer, approveOffer, approveRules } from "./actions";
 
 const CHANNEL_LABEL: Record<Channel, string> = {
   paid: "Paid ads",
@@ -39,7 +29,7 @@ interface OfferRow {
   offer_rules: RulesRow | RulesRow[] | null;
 }
 
-export default async function BrandPage({
+export default async function OffersPage({
   params,
   searchParams,
 }: {
@@ -52,7 +42,7 @@ export default async function BrandPage({
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, client_id, name, domain, niche, platforms, target_country, clients(name)")
+    .select("id, client_id")
     .eq("id", brandId)
     .maybeSingle();
   if (!brand) notFound();
@@ -77,53 +67,10 @@ export default async function BrandPage({
         CHANNEL_ORDER[a.result.channel] - CHANNEL_ORDER[b.result.channel] || b.result.score - a.result.score,
     );
 
-  const clientName = (brand.clients as unknown as { name: string } | null)?.name ?? "Client";
-  const chosen = new Set<string>(brand.platforms ?? []);
-
   return (
     <main className="stack">
-      <div>
-        <p className="crumbs">
-          <Link href="/clients">Clients</Link> / <Link href={`/clients/${brand.client_id}`}>{clientName}</Link>
-        </p>
-        <h1>{brand.name}</h1>
-        <p className="lede">
-          {brand.domain}
-          {brand.target_country ? `, audience in ${brand.target_country}` : ""}
-        </p>
-        <BrandNav brandId={brand.id} current="offers" />
-      </div>
-
       {notice ? <p className="notice" role="status">{notice}</p> : null}
       {error ? <p className="error" role="alert">{error}</p> : null}
-
-      <section className="stack" aria-labelledby="choices">
-        <h2 id="choices">Niche and platforms</h2>
-        <form action={saveChoices} className="panel grid">
-          <input type="hidden" name="brand_id" value={brand.id} />
-          <label className="wide">
-            Niche <span className="hint">What this brand is about, in a few words.</span>
-            <input type="text" name="niche" defaultValue={brand.niche ?? ""} placeholder="For example: productivity software" />
-          </label>
-          <fieldset className="wide">
-            <legend>Platforms</legend>
-            <div className="stack" style={{ gap: 8 }}>
-              {PLATFORMS.map((platform) => (
-                <label key={platform.value} style={{ fontWeight: 400 }}>
-                  <span style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--ink)", fontWeight: 600 }}>
-                    <input type="checkbox" name="platforms" value={platform.value} defaultChecked={chosen.has(platform.value)} />
-                    {platform.label}
-                  </span>
-                  <span className="hint">{platform.why}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="wide">
-            <button type="submit">Save choices</button>
-          </div>
-        </form>
-      </section>
 
       <section className="stack" aria-labelledby="offers">
         <div>

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
 import { checkContent, describeProblems } from "@/core/compliance/compliance";
 import { BusinessDetails, fillTemplate, missingDetails, offerPageStarter, slugify } from "@/modules/affiliate/site/site";
+import { requireAffiliate } from "@/modules/affiliate/guard";
 
 function back(path: string, kind: "notice" | "error", message: string): never {
   redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
@@ -14,32 +15,13 @@ const pagePath = (brandId: string, pageId: string) => `/brands/${brandId}/pages/
 
 async function loadBrand(brandId: string) {
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
   const { data: brand } = await supabase
     .from("brands")
     .select("id, client_id, name, domain, profile")
     .eq("id", brandId)
     .maybeSingle();
   return { supabase, brand };
-}
-
-/** C-01, C-04: the particulars that fill the compliance templates. */
-export async function saveDetails(formData: FormData) {
-  const brandId = String(formData.get("brand_id"));
-  const { supabase, brand } = await loadBrand(brandId);
-  if (!brand) back(sitePath(brandId), "error", "That brand was not found.");
-
-  const profile = {
-    ...((brand!.profile as Record<string, unknown>) ?? {}),
-    operator: String(formData.get("operator") ?? "").trim(),
-    address: String(formData.get("address") ?? "").trim(),
-    email: String(formData.get("email") ?? "").trim(),
-    tagline: String(formData.get("tagline") ?? "").trim(),
-  };
-  const { error } = await supabase.from("brands").update({ profile }).eq("id", brandId);
-  if (error) back(sitePath(brandId), "error", `Details were not saved: ${error.message}`);
-
-  revalidatePath(sitePath(brandId));
-  back(sitePath(brandId), "notice", "Business details saved.");
 }
 
 /** C-04, S-04: copy each compliance template into the site as a draft page. */
@@ -51,7 +33,7 @@ export async function createStandardPages(formData: FormData) {
   const profile = (brand!.profile ?? {}) as BusinessDetails;
   const missing = missingDetails(profile);
   if (missing.length > 0) {
-    back(sitePath(brandId), "error", `Add the ${missing.join(", ")} under Business details first.`);
+    back(sitePath(brandId), "error", `Add the ${missing.join(", ")} under Business details on the brand's Overview first.`);
   }
 
   const { data: templates, error: templateError } = await supabase
@@ -221,6 +203,7 @@ async function writeDraft(formData: FormData) {
   const summary = String(formData.get("summary") ?? "").trim();
   const body = String(formData.get("body") ?? "");
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
   if (!title) back(pagePath(brandId, pageId), "error", "Enter a title.");
 
   const { data, error } = await supabase
@@ -289,6 +272,7 @@ export async function unpublishPage(formData: FormData) {
   const brandId = String(formData.get("brand_id"));
   const pageId = String(formData.get("page_id"));
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
   const { error } = await supabase.from("site_pages").update({ status: "draft" }).eq("id", pageId);
   if (error) back(pagePath(brandId, pageId), "error", `Not unpublished: ${error.message}`);
   revalidatePath(pagePath(brandId, pageId));

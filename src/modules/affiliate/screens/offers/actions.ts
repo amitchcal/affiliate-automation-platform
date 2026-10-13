@@ -6,26 +6,12 @@ import { createClient } from "@/core/supabase/server";
 import { loadScoringConfig } from "@/core/scoring/scoring-config";
 import { formLevel, formNumber, toOfferInput } from "@/modules/affiliate/offers/offers";
 import { scoreOffer } from "@/core/scoring/score";
+import { requireAffiliate } from "@/modules/affiliate/guard";
+
+const offersPath = (brandId: string) => `/brands/${brandId}/offers`;
 
 function back(brandId: string, kind: "notice" | "error", message: string): never {
-  redirect(`/brands/${brandId}?${kind}=${encodeURIComponent(message)}`);
-}
-
-/** O-01 and O-07: the client's choice of niche and platforms. */
-export async function saveChoices(formData: FormData) {
-  const brandId = String(formData.get("brand_id"));
-  const niche = String(formData.get("niche") ?? "").trim();
-  const platforms = formData.getAll("platforms").map(String);
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("brands")
-    .update({ niche: niche || null, platforms })
-    .eq("id", brandId);
-  if (error) back(brandId, "error", `Choices were not saved: ${error.message}`);
-
-  revalidatePath(`/brands/${brandId}`);
-  back(brandId, "notice", "Choices saved.");
+  redirect(`${offersPath(brandId)}?${kind}=${encodeURIComponent(message)}`);
 }
 
 /**
@@ -38,6 +24,7 @@ export async function addOffer(formData: FormData) {
   if (!name) back(brandId, "error", "Enter the offer's name.");
 
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
 
   // The client is read from the brand, never taken from the form.
   const { data: brand } = await supabase.from("brands").select("id, client_id").eq("id", brandId).maybeSingle();
@@ -108,7 +95,7 @@ export async function addOffer(formData: FormData) {
     .eq("id", offerId);
   if (scoreError) back(brandId, "error", `The score was not saved: ${scoreError.message}`);
 
-  revalidatePath(`/brands/${brandId}`);
+  revalidatePath(offersPath(brandId));
   back(brandId, "notice", `${name} scored ${result.score} out of 100.`);
 }
 
@@ -117,6 +104,7 @@ export async function approveRules(formData: FormData) {
   const brandId = String(formData.get("brand_id"));
   const offerId = String(formData.get("offer_id"));
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -129,7 +117,7 @@ export async function approveRules(formData: FormData) {
   if (!data || data.length === 0) {
     back(brandId, "error", "The rules were not approved. Your role may not allow it, or no rules are recorded.");
   }
-  revalidatePath(`/brands/${brandId}`);
+  revalidatePath(offersPath(brandId));
   back(brandId, "notice", "Seller's rules approved.");
 }
 
@@ -138,6 +126,7 @@ export async function approveOffer(formData: FormData) {
   const brandId = String(formData.get("brand_id"));
   const offerId = String(formData.get("offer_id"));
   const supabase = await createClient();
+  await requireAffiliate(supabase, brandId);
   const { data, error } = await supabase
     .from("offers")
     .update({ status: "approved" })
@@ -150,6 +139,6 @@ export async function approveOffer(formData: FormData) {
     back(brandId, "error", message);
   }
   if (!data || data.length === 0) back(brandId, "error", "The offer was not approved. Your role may not allow it.");
-  revalidatePath(`/brands/${brandId}`);
+  revalidatePath(offersPath(brandId));
   back(brandId, "notice", "Offer approved.");
 }

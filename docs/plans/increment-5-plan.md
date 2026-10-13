@@ -1,6 +1,6 @@
 # Increment 5 plan: module split, Affiqube rename, test brands, T-07
 
-Prepared 13 October 2026. Status: approved by the owner on 13 October 2026, with the decisions in section 8. Stage A built and tested on 13 October 2026; awaiting the owner's confirmation before it is committed. Stage B not started.
+Prepared 13 October 2026. Status: approved by the owner on 13 October 2026, with the decisions in section 8. Stage A committed (e1065ee). Database work committed (ee21877): 0005, 0006 (added at the owner's request, closing the client-consistency gap), verify files, tests. 0005 and 0006 applied on Supabase; all 15 `verify_modules.sql` and all 6 `verify_consistency.sql` rows ok. Stage B application code built, tested, and committed at the owner's go-ahead; the owner's walkthrough of the screens is still pending.
 
 ## 1. Scope
 

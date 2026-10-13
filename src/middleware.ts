@@ -6,8 +6,8 @@ import { NextResponse, type NextRequest } from "next/server";
  *
  * 1. Routing by domain (S-01). A request for a brand's own domain is served
  *    that brand's public site. A request for an admin host is served the
- *    application. Admin hosts are localhost, any *.vercel.app address, and
- *    anything listed in ADMIN_HOSTS.
+ *    application. Admin hosts are the platform's own domain (affiqube.com),
+ *    localhost, any *.vercel.app address, and anything listed in ADMIN_HOSTS.
  *
  * 2. Sessions. On admin hosts, the session is refreshed and signed-out
  *    visitors are sent to sign-in. Data protection does not rely on this:
@@ -19,8 +19,11 @@ const ADMIN_HOSTS = (process.env.ADMIN_HOSTS ?? "localhost,127.0.0.1")
   .map((host) => host.trim().toLowerCase())
   .filter(Boolean);
 
+// The platform's own domain is never a brand (decided 13 October 2026).
+const PLATFORM_HOSTS = ["affiqube.com", "www.affiqube.com"];
+
 function isAdminHost(host: string): boolean {
-  return ADMIN_HOSTS.includes(host) || host.endsWith(".vercel.app");
+  return PLATFORM_HOSTS.includes(host) || ADMIN_HOSTS.includes(host) || host.endsWith(".vercel.app");
 }
 
 function withSiteBase(request: NextRequest, base: string): Headers {

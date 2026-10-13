@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClientUnmatched } from "@/modules/affiliate/results/results";
+import { businessTypeLabel } from "@/core/modules";
 import { createClient } from "@/core/supabase/server";
 
 export default async function ClientPage({ params }: { params: Promise<{ clientId: string }> }) {
@@ -10,7 +11,7 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
   const [{ data: client }, unmatched] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name, brands(id, name, domain, niche)")
+      .select("id, name, brands(id, name, domain, niche, business_type)")
       .eq("id", clientId)
       .maybeSingle(),
     getClientUnmatched(supabase, clientId),
@@ -27,7 +28,7 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
           <Link href="/clients">Clients</Link>
         </p>
         <h1>{client.name}</h1>
-        <p className="lede">Choose a brand to set its niche, score its offers, and view results.</p>
+        <p className="lede">Choose a brand to open its overview. Each brand shows only the features its business type uses.</p>
       </div>
       {client.brands.length > 0 ? (
         <ul className="rows">
@@ -36,7 +37,7 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
               <Link href={`/brands/${brand.id}`} className="rowlink">
                 <strong>{brand.name}</strong>
                 <span>
-                  {brand.domain}
+                  {businessTypeLabel(brand.business_type)}, {brand.domain}
                   {brand.niche ? `, ${brand.niche}` : ", niche not chosen"}
                 </span>
               </Link>

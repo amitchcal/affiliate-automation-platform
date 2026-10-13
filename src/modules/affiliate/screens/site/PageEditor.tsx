@@ -50,10 +50,10 @@ export default async function PageEditor({
     <main className="stack">
       <div>
         <p className="crumbs">
-          <Link href={`/brands/${brandId}/site`}>{brand.name}: site and links</Link>
+          <Link href={`/brands/${brandId}/site`}>Back to {brand.name}: site and links</Link>
         </p>
         <div className="split">
-          <h1>{page.title}</h1>
+          <h2>{page.title}</h2>
           <span className={`status ${published ? (changed ? "changed" : "published") : "draft"}`}>
             {published ? (changed ? "Published, with unpublished changes" : "Published") : "Draft"}
           </span>

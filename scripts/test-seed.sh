@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Applies the schema and the seed to a scratch database and runs verify.sql.
+# Applies the schema, the seed, and every later migration to a scratch database,
+# then runs the verify files. Every verify row should read "ok".
 set -euo pipefail
 DB="${TEST_DB:-map_seed_test}"
 PSQL="${PSQL:-psql -v ON_ERROR_STOP=1 -q}"
@@ -13,4 +14,14 @@ $PSQL -d "$DB" -c "insert into auth.users (email) values ('amit.chakraborty@affi
 echo "--- seed twice (must be repeatable) ---"
 $PSQL -d "$DB" -f supabase/migrations/0002_seed_first_client.sql
 $PSQL -d "$DB" -f supabase/migrations/0002_seed_first_client.sql
-psql -d "$DB" -f supabase/verify.sql
+echo "--- later migrations; 0005 and 0006 twice (must be repeatable) ---"
+$PSQL -d "$DB" -f supabase/migrations/0003_site.sql
+$PSQL -d "$DB" -f supabase/migrations/0004_results.sql
+$PSQL -d "$DB" -f supabase/migrations/0005_modules_and_test_brands.sql
+$PSQL -d "$DB" -f supabase/migrations/0005_modules_and_test_brands.sql
+$PSQL -d "$DB" -f supabase/migrations/0006_client_consistency.sql
+$PSQL -d "$DB" -f supabase/migrations/0006_client_consistency.sql
+for f in verify verify_site verify_results verify_modules verify_consistency; do
+  echo "--- $f.sql ---"
+  psql -d "$DB" -A -F ' | ' -t -f "supabase/$f.sql"
+done

@@ -1,16 +1,22 @@
 # How it works
 
 A plain-language overview for someone who needs to understand the product without reading the code.
-Updated after increment 4, October 2026.
+Updated after increment 5, October 2026.
 
 ---
 
 ## What the platform does
 
-It runs affiliate marketing for brands. Affiliate marketing means earning a commission by
-sending visitors to a seller's product page and getting paid when they buy. The platform does
-the work that would otherwise be done by hand: it scores offers, builds the website, records
-every click, and pulls in sales data so you can see what is working.
+Affiqube runs marketing for two kinds of business.
+
+- **Affiliate marketing** means earning a commission by sending visitors to a seller's product
+  page and getting paid when they buy. For these brands the platform scores offers, builds the
+  website, records every click, and pulls in sales data so you can see what is working.
+- **Dropshipping** means selling products from your own store, with a supplier shipping each
+  order to the customer. The screens for this arrive in a later release.
+
+The parts both kinds of business need, such as clients, brands, sign-in, approvals, and the audit
+record, are shared. Each kind of business adds its own features on top, as a **module**.
 
 ---
 
@@ -21,12 +27,30 @@ The platform is multi-tenant. One installation serves several independent client
 A **client** is the company or person who owns one or more brands. Everything a client owns
 is kept separate from every other client. A client's users cannot see another client's data.
 
-A **brand** is the affiliate website: it has its own domain name, its own niche (what it is about),
-and its own set of offers. One brand might be a site about dog training software; another might
-be about productivity tools. They are run independently.
+A **brand** is one business with its own domain name and its own niche (what it is about). One
+brand might be a site about dog training software; another might be a home decoration store.
+They are run independently.
 
 The **owner** (Vividha Marketing, Amit Chakraborty) has access to every client and can switch
 between them. Clients see only their own brands.
+
+### Business type
+
+Each brand has a **business type**: Affiliate marketing, Dropshipping, or Both. The type decides
+which modules the brand uses. A brand set to Dropshipping does not see offers, the affiliate
+website, or tracked links, and the platform refuses any attempt to add them. This refusal is
+built into the database, so it holds even if someone bypasses the screens.
+
+Only the owner and operators can change a business type. Each change is written to the audit
+record. Switching a module off hides it but deletes nothing, so switching it back on restores
+everything as it was.
+
+Every row of data also names its client, and the database checks that this matches the brand,
+offer, or link it belongs to. One client's data can never be attached to another client's brand.
+
+The first client has two test brands. **AffilyVault** (affilyvault.com) does affiliate marketing.
+**Famperia** (famperia.com) is a dropshipping store selling home decoration. `affiqube.com` is the
+platform's own address, not a brand.
 
 ---
 
