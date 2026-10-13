@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CONFIG } from "@/scoring/config";
+import { DEFAULT_CONFIG } from "@/core/scoring/config";
 import { configFromRow, pickConfigRow, ScoringConfigRow } from "./scoring-config";
 
 const base: ScoringConfigRow = {

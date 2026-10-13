@@ -1,8 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { importForClient, importNotice } from "@/lib/clickbank";
+import { createClient } from "@/core/supabase/server";
+import { importForClient, importNotice } from "@/modules/affiliate/results/clickbank";
 
 function back(path: string, kind: "notice" | "error", message: string): never {
   redirect(`${path}?${kind}=${encodeURIComponent(message)}`);

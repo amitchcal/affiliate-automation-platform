@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkContent } from "./compliance";
+import { checkContent } from "@/core/compliance/compliance";
 import { fillTemplate, missingDetails, offerPageStarter, slugify } from "./site";
 
 describe("slugify", () => {

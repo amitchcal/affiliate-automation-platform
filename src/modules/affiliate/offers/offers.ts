@@ -1,4 +1,4 @@
-import type { OfferInput, Level } from "@/scoring/config";
+import type { OfferInput, Level } from "@/core/scoring/config";
 
 export interface MetricsRow {
   captured_on: string;

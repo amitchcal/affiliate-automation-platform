@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEFAULT_CONFIG, ScoringConfig, validateConfig } from "@/scoring/config";
+import { DEFAULT_CONFIG, ScoringConfig, validateConfig } from "@/core/scoring/config";
 
 /** A row of the scoring_configs table, as stored. */
 export interface ScoringConfigRow {

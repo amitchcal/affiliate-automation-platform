@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { checkContent, describeProblems } from "@/lib/compliance";
-import { BusinessDetails, fillTemplate, missingDetails, offerPageStarter, slugify } from "@/lib/site";
+import { createClient } from "@/core/supabase/server";
+import { checkContent, describeProblems } from "@/core/compliance/compliance";
+import { BusinessDetails, fillTemplate, missingDetails, offerPageStarter, slugify } from "@/modules/affiliate/site/site";
 
 function back(path: string, kind: "notice" | "error", message: string): never {
   redirect(`${path}?${kind}=${encodeURIComponent(message)}`);

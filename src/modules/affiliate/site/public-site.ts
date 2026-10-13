@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { createPublicClient } from "@/lib/supabase/public";
+import { createPublicClient } from "@/core/supabase/public";
 
 export interface PublicBrand {
   name: string;

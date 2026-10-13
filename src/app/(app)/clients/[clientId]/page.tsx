@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getClientUnmatched } from "@/lib/results";
-import { createClient } from "@/lib/supabase/server";
+import { getClientUnmatched } from "@/modules/affiliate/results/results";
+import { createClient } from "@/core/supabase/server";
 
 export default async function ClientPage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = await params;

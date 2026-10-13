@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { loadScoringConfig } from "@/lib/scoring-config";
-import { formLevel, formNumber, toOfferInput } from "@/lib/offers";
-import { scoreOffer } from "@/scoring/score";
+import { createClient } from "@/core/supabase/server";
+import { loadScoringConfig } from "@/core/scoring/scoring-config";
+import { formLevel, formNumber, toOfferInput } from "@/modules/affiliate/offers/offers";
+import { scoreOffer } from "@/core/scoring/score";
 
 function back(brandId: string, kind: "notice" | "error", message: string): never {
   redirect(`/brands/${brandId}?${kind}=${encodeURIComponent(message)}`);
