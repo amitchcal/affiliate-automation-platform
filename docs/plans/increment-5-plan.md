@@ -186,3 +186,8 @@ All 33 moved files are recorded by git as moves. The only edits inside them are 
 |---|---|---|
 | 5 | Do the brand screens still work in your browser? In PowerShell, in the repository folder, run `npm run dev`. Then open `http://localhost:3000`, sign in, and open AffiQube's Offers, Site and links, Results, and one page in the editor. Each should look as it did before. | If anything differs, I diagnose it before committing. |
 | 6 | May I commit stage A? Message: "Increment 5 stage A: move code into core and affiliate module (T-07 groundwork)". | On "commit", I commit stage A, then start stage B. |
+
+## 11. Next steps
+
+- Next session starts with increment 5.1: Supabase running locally in Docker, Playwright end-to-end tests for the increment 5 walkthrough, and a CLAUDE.md rule that every increment is handed over only after its end-to-end tests pass.
+- Walkthrough fix: after a save on the Overview, the confirmation and the saved values now show at once (each form is keyed on its saved values; shared `StatusMessages`). The same keys are on the page editor, the affiliate-link and entry forms on Site and links, the Offers entry form, and the Results forms. The owner re-checked the Overview saves in Chrome on 13 October 2026: passed.

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
+import { StatusMessages } from "@/core/components/StatusMessages";
 import { loadScoringConfig } from "@/core/scoring/scoring-config";
 import { latestMetrics, MetricsRow, RulesRow, toOfferInput } from "@/modules/affiliate/offers/offers";
 import { PARAMETER_LABELS } from "@/core/scoring/config";
@@ -69,8 +70,7 @@ export default async function OffersPage({
 
   return (
     <main className="stack">
-      {notice ? <p className="notice" role="status">{notice}</p> : null}
-      {error ? <p className="error" role="alert">{error}</p> : null}
+      <StatusMessages notice={notice} error={error} />
 
       <section className="stack" aria-labelledby="offers">
         <div>
@@ -150,7 +150,7 @@ export default async function OffersPage({
             Enter what you know. Blank figures are treated as not yet known, and the score says what is missing.
           </p>
         </div>
-        <form action={addOffer} className="panel grid">
+        <form key={`offer:${offers.length}`} action={addOffer} className="panel grid">
           <input type="hidden" name="brand_id" value={brand.id} />
           <label>
             Offer name

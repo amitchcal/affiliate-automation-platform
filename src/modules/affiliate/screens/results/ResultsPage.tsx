@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
+import { StatusMessages } from "@/core/components/StatusMessages";
 import { getBrandMetrics, OfferMetrics } from "@/modules/affiliate/results/results";
 import { importRefusal } from "@/modules/affiliate/results/clickbank";
 import { importSales } from "./actions";
@@ -68,13 +69,12 @@ export default async function ResultsPage({
 
   return (
     <main className="stack">
-      {sp.notice ? <p className="notice" role="status">{sp.notice}</p> : null}
-      {sp.error ? <p className="error" role="alert">{sp.error}</p> : null}
+      <StatusMessages notice={sp.notice} error={sp.error} />
 
       <section className="stack" aria-labelledby="summary">
         <div className="split">
           <h2 id="summary">Results</h2>
-          <form method="get" className="inline" style={{ gap: 8, alignItems: "center" }}>
+          <form key={`range:${sinceStr}:${untilStr}`} method="get" className="inline" style={{ gap: 8, alignItems: "center" }}>
             <label>
               From
               <input type="date" name="since" defaultValue={sinceStr} style={{ marginLeft: 4 }} />
@@ -150,7 +150,7 @@ export default async function ResultsPage({
           {importBlocked ? (
             <p className="panel empty">{importBlocked}</p>
           ) : (
-            <form action={importSales} className="panel inline" style={{ alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+            <form key={`import:${sinceStr}:${untilStr}`} action={importSales} className="panel inline" style={{ alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
               <input type="hidden" name="brand_id" value={brand.id} />
               <label>
                 From

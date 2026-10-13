@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
+import { savedValuesKey } from "@/core/form-key";
+import { StatusMessages } from "@/core/components/StatusMessages";
 import { BusinessDetails, missingDetails } from "@/modules/affiliate/site/site";
 import { createArticle, createLink, createOfferPage, createStandardPages } from "./actions";
 
@@ -92,8 +94,7 @@ export default async function BrandSitePage({
         </a>
       </p>
 
-      {notice ? <p className="notice" role="status">{notice}</p> : null}
-      {error ? <p className="error" role="alert">{error}</p> : null}
+      <StatusMessages notice={notice} error={error} />
 
       <section className="stack" aria-labelledby="standard">
         <div>
@@ -135,7 +136,12 @@ export default async function BrandSitePage({
         )}
 
         {offersWithoutPage.map((offer) => (
-          <form key={offer.id} action={createOfferPage} className="panel inline">
+          <form
+            key={`${offer.id}:${savedValuesKey(offer.affiliate_link)}`}
+            action={createOfferPage}
+            className="panel inline"
+            autoComplete="off"
+          >
             <input type="hidden" name="brand_id" value={brand.id} />
             <input type="hidden" name="offer_id" value={offer.id} />
             <label>
@@ -146,7 +152,7 @@ export default async function BrandSitePage({
           </form>
         ))}
 
-        <form action={createArticle} className="panel inline">
+        <form key={`article:${content.length}`} action={createArticle} className="panel inline">
           <input type="hidden" name="brand_id" value={brand.id} />
           <label>
             New article title
@@ -196,7 +202,7 @@ export default async function BrandSitePage({
         )}
 
         {offers.some((offer) => offer.affiliate_link) ? (
-          <form action={createLink} className="panel grid">
+          <form key={`link:${links.length}`} action={createLink} className="panel grid">
             <input type="hidden" name="brand_id" value={brand.id} />
             <label>
               Offer

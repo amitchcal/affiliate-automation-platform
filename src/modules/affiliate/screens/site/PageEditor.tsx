@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
+import { savedValuesKey } from "@/core/form-key";
+import { StatusMessages } from "@/core/components/StatusMessages";
 import { checkContent } from "@/core/compliance/compliance";
 import { renderMarkdown } from "@/core/content/markdown";
 import { publishPage, saveDraft, unpublishPage } from "./actions";
@@ -63,12 +65,15 @@ export default async function PageEditor({
         </p>
       </div>
 
-      {notice ? <p className="notice" role="status">{notice}</p> : null}
-      {error ? <p className="error" role="alert">{error}</p> : null}
+      <StatusMessages notice={notice} error={error} />
 
       <section className="stack" aria-labelledby="edit">
         <h2 id="edit">Edit</h2>
-        <form className="panel grid">
+        <form
+          key={savedValuesKey({ title: page.title, summary: page.summary, body: page.draft_body, status: page.status })}
+          className="panel grid"
+          autoComplete="off"
+        >
           <input type="hidden" name="brand_id" value={brandId} />
           <input type="hidden" name="page_id" value={page.id} />
           <label className="wide">

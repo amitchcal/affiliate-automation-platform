@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
+import { savedValuesKey } from "@/core/form-key";
+import { StatusMessages } from "@/core/components/StatusMessages";
 import { BUSINESS_TYPES, ModuleDefinition, modulesFor } from "@/core/modules";
 import { saveBusinessType, saveChoices, saveDetails } from "./brand-actions";
 
@@ -49,8 +51,7 @@ export default async function BrandOverview({
 
   return (
     <main className="stack">
-      {notice ? <p className="notice" role="status">{notice}</p> : null}
-      {error ? <p className="error" role="alert">{error}</p> : null}
+      <StatusMessages notice={notice} error={error} />
 
       <section className="stack" aria-labelledby="business-type">
         <div>
@@ -60,7 +61,7 @@ export default async function BrandOverview({
             nothing already recorded is deleted.
           </p>
         </div>
-        <form action={saveBusinessType} className="panel stack">
+        <form key={savedValuesKey(brand.business_type)} action={saveBusinessType} className="panel stack" autoComplete="off">
           <input type="hidden" name="brand_id" value={brand.id} />
           <fieldset>
             <legend>What kind of business is this brand?</legend>
@@ -105,7 +106,7 @@ export default async function BrandOverview({
 
       <section className="stack" aria-labelledby="choices">
         <h2 id="choices">Niche and platforms</h2>
-        <form action={saveChoices} className="panel grid">
+        <form key={savedValuesKey({ niche: brand.niche, platforms: brand.platforms })} action={saveChoices} className="panel grid" autoComplete="off">
           <input type="hidden" name="brand_id" value={brand.id} />
           <label className="wide">
             Niche <span className="hint">What this brand is about, in a few words.</span>
@@ -136,7 +137,7 @@ export default async function BrandOverview({
           <h2 id="details">Business details</h2>
           <p className="lede">Who runs this brand and how to reach them. An affiliate site uses these on its standard pages.</p>
         </div>
-        <form action={saveDetails} className="panel grid">
+        <form key={savedValuesKey(profile)} action={saveDetails} className="panel grid" autoComplete="off">
           <input type="hidden" name="brand_id" value={brand.id} />
           <label>
             Operator name <span className="hint">The business that runs this brand.</span>
