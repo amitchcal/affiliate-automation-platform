@@ -24,6 +24,9 @@ run_suite() {
   $PSQL -d "$db" -f supabase/migrations/0007_privacy_template_wording.sql >/dev/null
   # A second run proves 0007 is safe to apply twice.
   $PSQL -d "$db" -f supabase/migrations/0007_privacy_template_wording.sql >/dev/null
+  $PSQL -d "$db" -f supabase/migrations/0008_invitations.sql >/dev/null
+  # A second run proves 0008 is safe to apply twice.
+  $PSQL -d "$db" -f supabase/migrations/0008_invitations.sql >/dev/null
   $PSQL -d "$db" -f supabase/tests/local_grants.sql >/dev/null
   # A failing test stops psql with an ERROR, so the suite's PASSED line never prints.
   local out
@@ -41,3 +44,4 @@ run_suite map_test_results supabase/tests/results_rules.sql
 run_suite map_test_consistency supabase/tests/consistency_rules.sql
 run_suite map_test_modules supabase/tests/module_rules.sql
 run_suite map_test_privacy supabase/tests/privacy_template_rules.sql
+run_suite map_test_invitations supabase/tests/invitation_rules.sql

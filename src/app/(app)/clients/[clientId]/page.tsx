@@ -1,22 +1,35 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClientUnmatched } from "@/modules/affiliate/results/results";
+import { StatusMessages } from "@/core/components/StatusMessages";
 import { businessTypeLabel } from "@/core/modules";
 import { createClient } from "@/core/supabase/server";
 
-export default async function ClientPage({ params }: { params: Promise<{ clientId: string }> }) {
+export default async function ClientPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ notice?: string; error?: string }>;
+}) {
   const { clientId } = await params;
+  const { notice, error } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: client }, unmatched] = await Promise.all([
+  const [{ data: client }, unmatched, { data: own }] = await Promise.all([
     supabase
       .from("clients")
       .select("id, name, brands(id, name, domain, niche, business_type)")
       .eq("id", clientId)
       .maybeSingle(),
     getClientUnmatched(supabase, clientId),
+    supabase.from("memberships").select("role, client_id"),
   ]);
   if (!client) notFound();
+  // People (T-03) is for the owner and this client's admins; the database enforces it.
+  const managesPeople = (own ?? []).some(
+    (row) => row.role === "owner" || (row.role === "client_admin" && row.client_id === clientId),
+  );
 
   const unmatchedNet = unmatched.netCommission;
   const hasUnmatched = unmatched.records > 0;
@@ -29,7 +42,13 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
         </p>
         <h1>{client.name}</h1>
         <p className="lede">Choose a brand to open its overview. Each brand shows only the features its business type uses.</p>
+        {managesPeople ? (
+          <p>
+            <Link href={`/clients/${client.id}/people`}>People</Link>: members and invitations
+          </p>
+        ) : null}
       </div>
+      <StatusMessages notice={notice} error={error} />
       {client.brands.length > 0 ? (
         <ul className="rows">
           {client.brands.map((brand) => (

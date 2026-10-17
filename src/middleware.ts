@@ -49,6 +49,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: withSiteBase(request, `/site/${domain}`) } });
   }
 
+  // Email links (T-03): open to signed-out visitors, and left untouched here, so
+  // opening a link (as an email scanner does) neither signs in nor sets a cookie.
+  // Only pressing Continue on that page uses the link.
+  if (pathname.startsWith("/auth/")) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -41,6 +41,9 @@ export const DB_CONTAINER = `supabase_db_${E2E_PROJECT_ID}`;
 export const RUN_FILE = process.env.E2E_RUN_FILE || path.join(ROOT, "e2e", ".run", "run.json");
 export const DIST_DIR = ".next-e2e";
 export const APP_PORT = 3100;
+/** The local mail catcher (Mailpit). Every email the test stack sends lands here; none leaves the machine. */
+export const MAIL_PORT = 54424;
+export const MAIL_URL = `http://127.0.0.1:${MAIL_PORT}`;
 
 const BIN = {
   supabase: path.join(ROOT, "node_modules", "supabase", "dist", "supabase.js"),
@@ -128,6 +131,13 @@ export function configRefusal(configText) {
   if (projectId !== E2E_PROJECT_ID) return `config.toml's project_id is "${projectId}", not "${E2E_PROJECT_ID}".`;
   if (port("api") !== 54421) return `config.toml puts the API on port ${port("api")}, not 54421.`;
   if (port("db") !== LOCAL_DB_PORT) return `config.toml puts the database on port ${port("db")}, not ${LOCAL_DB_PORT}.`;
+  // Email goes only to the local mail catcher, never to a real mail server (increment 6).
+  if (/^enabled\s*=\s*true/m.test(section("local_smtp")) && port("local_smtp") !== MAIL_PORT) {
+    return `config.toml puts the mail catcher on port ${port("local_smtp")}, not ${MAIL_PORT}.`;
+  }
+  if (/^\[auth\.email\.smtp\]/m.test(configText)) {
+    return "config.toml configures a real mail server ([auth.email.smtp]). The tests never send real email.";
+  }
   return null;
 }
 
@@ -143,6 +153,21 @@ export function assertE2eConfig() {
   if (refusal) fail(refusal);
 }
 
+/**
+ * The local test stack's service role key, read from `supabase status` for
+ * this project's own stack, kept in memory and never written. Stops unless the
+ * stack's address is the test stack's.
+ */
+export function localServiceKey() {
+  const result = tool("supabase", ["status", "--workdir", E2E_WORKDIR, "--output", "json"], { capture: true });
+  const start = result.stdout.indexOf("{");
+  if (result.status !== 0 || start < 0) fail("could not read the local Supabase status.");
+  const info = JSON.parse(result.stdout.slice(start));
+  assertLocalUrl(info.API_URL);
+  if (!info.SERVICE_ROLE_KEY) fail("the local Supabase status did not include its service role key.");
+  return info.SERVICE_ROLE_KEY;
+}
+
 /** The settings written by e2e-db.mjs for this run. */
 export function readRun() {
   if (!existsSync(RUN_FILE)) fail("no test run is prepared. Run: npm run test:e2e");
@@ -156,12 +181,15 @@ export function readRun() {
  * directly, and __NEXT_PROCESSED_ENV tells Next.js its environment is already
  * loaded, so .env.local (which points at the hosted project) is never read.
  * CLICKBANK_API_KEY is set empty, so no import can reach ClickBank.
+ * The local stack's service role key is passed only together with the local
+ * address, so the application under test can send invitations into the mail
+ * catcher and nowhere else.
  */
-export function appEnv(run) {
+export function appEnv(run, serviceKey) {
   assertLocalUrl(run.supabaseUrl);
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (key.startsWith("NEXT_PUBLIC_") || key.startsWith("SUPABASE_") || key === "CLICKBANK_API_KEY") delete env[key];
+    if (key.startsWith("NEXT_PUBLIC_") || key.startsWith("SUPABASE_") || key === "CLICKBANK_API_KEY" || key === "E2E_SERVICE_KEY") delete env[key];
   }
   return {
     ...env,
@@ -172,5 +200,6 @@ export function appEnv(run) {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: run.anonKey,
     ADMIN_HOSTS: "localhost,127.0.0.1",
     CLICKBANK_API_KEY: "",
+    ...(serviceKey ? { SUPABASE_SERVICE_ROLE_KEY: serviceKey } : {}),
   };
 }

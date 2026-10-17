@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { configRefusal, dbUrlRefusal, LOCAL_SUPABASE_URL, ROOT, supabaseUrlRefusal } from "./e2e-lib.mjs";
+import { appEnv, configRefusal, dbUrlRefusal, LOCAL_SUPABASE_URL, ROOT, supabaseUrlRefusal } from "./e2e-lib.mjs";
 
 describe("Supabase address guard", () => {
   it("accepts only the test stack's address", () => {
@@ -54,6 +54,48 @@ describe("e2e/supabase/config.toml guard", () => {
     expect(configRefusal(config.replace(/^port = 54421$/m, "port = 54321"))).toMatch(/54321/);
     expect(configRefusal(config.replace(/^port = 54422$/m, "port = 54322"))).toMatch(/54322/);
     expect(configRefusal(config.replace(/^project_id = .*$/m, 'project_id = "interior-ai"'))).toMatch(/interior-ai/);
+  });
+
+  it("the committed configuration catches every email in the local mail catcher on 54424", () => {
+    expect(config).toMatch(/^\[local_smtp\]\s*\r?\nenabled = true/m);
+    expect(config).not.toMatch(/^\[auth\.email\.smtp\]/m);
+  });
+
+  it("refuses a real mail server, or a mail catcher outside the test stack's ports", () => {
+    const realSmtp = `${config}\n[auth.email.smtp]\nenabled = true\nhost = "smtp.resend.com"\nport = 465\n[end]\n`;
+    expect(configRefusal(realSmtp)).toMatch(/real mail server/);
+    expect(configRefusal(config.replace(/^port = 54424$/m, "port = 54324"))).toMatch(/mail catcher on port 54324/);
+  });
+});
+
+describe("the service role key given to the application under test", () => {
+  const run = { supabaseUrl: "http://127.0.0.1:54421", anonKey: "anon", preparedAt: "", users: {} } as never;
+
+  it("is passed only when given, under its server-only name, never as NEXT_PUBLIC_", () => {
+    expect(appEnv(run).SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+    const env = appEnv(run, "local-key");
+    expect(env.SUPABASE_SERVICE_ROLE_KEY).toBe("local-key");
+    expect(Object.entries(env).filter(([name, value]) => name.startsWith("NEXT_PUBLIC_") && value === "local-key")).toEqual([]);
+  });
+
+  it("does not pass on the test runner's own copy of the key", () => {
+    process.env.E2E_SERVICE_KEY = "runner-copy";
+    try {
+      expect(appEnv(run, "local-key").E2E_SERVICE_KEY).toBeUndefined();
+    } finally {
+      delete process.env.E2E_SERVICE_KEY;
+    }
+  });
+
+  it("is refused with any address but the test stack's", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e",
+        "const m = await import('./scripts/e2e-lib.mjs'); m.appEnv({ supabaseUrl: 'http://127.0.0.1:54321', anonKey: 'x' }, 'k'); console.log('NOT REFUSED')"],
+      { cwd: ROOT, encoding: "utf8" },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toContain("NOT REFUSED");
   });
 });
 

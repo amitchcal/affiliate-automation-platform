@@ -1,9 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
-import { APP_PORT, appEnv, readRun } from "./scripts/e2e-lib.mjs";
+import { APP_PORT, appEnv, localServiceKey, readRun } from "./scripts/e2e-lib.mjs";
 
 // readRun() stops here unless the prepared run points at the local test stack
 // (http://127.0.0.1:54421). Prepare it with: npm run test:e2e
 const run = readRun();
+// The local stack's own service role key, so the application under test can
+// send invitations into the local mail catcher. Passed in by e2e.mjs, or read
+// from this project's local stack; never written to disk.
+const serviceKey = process.env.E2E_SERVICE_KEY || localServiceKey();
+process.env.E2E_SERVICE_KEY = serviceKey;
 
 export default defineConfig({
   testDir: "e2e",
@@ -25,7 +30,7 @@ export default defineConfig({
   webServer: {
     command: `node node_modules/next/dist/bin/next start -p ${APP_PORT}`,
     url: `http://localhost:${APP_PORT}/login`,
-    env: appEnv(run),
+    env: appEnv(run, serviceKey),
     reuseExistingServer: false,
     timeout: 120_000,
   },

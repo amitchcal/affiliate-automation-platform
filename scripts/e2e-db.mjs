@@ -11,8 +11,8 @@
 // 54422 (database), the stack answers at http://127.0.0.1:54421, and the containers on
 // those ports belong to this project. Port 54321 (interior-ai) and the hosted project
 // are never touched. The hosted project is never touched.
-import { randomBytes } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   assertE2eConfig,
@@ -25,6 +25,7 @@ import {
   fail,
   LOCAL_DB_PORT,
   LOCAL_SUPABASE_URL,
+  MAIL_PORT,
   ROOT,
   RUN_FILE,
   tool,
@@ -39,6 +40,19 @@ export const TEST_USERS = {
 
 const step = (text) => console.log(`\n== ${text}`);
 
+// The stack reads config.toml and the email templates only when it starts. If
+// they changed since this project's stack was started, it is restarted.
+const STACK_STAMP = path.join(path.dirname(RUN_FILE), "stack-config.sha256");
+function stackConfigHash() {
+  const hash = createHash("sha256");
+  hash.update(readFileSync(path.join(ROOT, E2E_WORKDIR, "supabase", "config.toml")));
+  const templates = path.join(ROOT, "supabase", "email-templates");
+  if (existsSync(templates)) {
+    for (const name of readdirSync(templates).sort()) hash.update(name).update(readFileSync(path.join(templates, name)));
+  }
+  return hash.digest("hex");
+}
+
 function checkDocker() {
   if (docker(["info", "--format", "{{.ServerVersion}}"]).status !== 0) {
     fail("Docker is not running. Start Docker Desktop and run this again.");
@@ -50,7 +64,7 @@ function checkDocker() {
  * to another project's stack (interior-ai runs on 54321-54327).
  */
 function checkPortOwner() {
-  for (const port of [54421, LOCAL_DB_PORT]) {
+  for (const port of [54421, LOCAL_DB_PORT, MAIL_PORT]) {
     const names = docker(["ps", "--filter", `publish=${port}`, "--format", "{{.Names}}"]).stdout.trim().split(/\s+/).filter(Boolean);
     const other = names.find((name) => !name.endsWith(`_${E2E_PROJECT_ID}`));
     if (other) fail(`port ${port} is in use by "${other}", which is not this project's test stack. Free that port, then run this again.`);
@@ -87,7 +101,22 @@ export async function prepareDatabase() {
   assertE2eConfig();
   checkDocker();
   checkPortOwner();
+  // The CLI reads templates only from inside e2e/, so the repository's own
+  // templates (supabase/email-templates, the one source) are copied there.
+  const templateCopies = path.join(ROOT, E2E_WORKDIR, "supabase", "templates");
+  mkdirSync(templateCopies, { recursive: true });
+  for (const name of readdirSync(path.join(ROOT, "supabase", "email-templates"))) {
+    copyFileSync(path.join(ROOT, "supabase", "email-templates", name), path.join(templateCopies, name));
+  }
+  const configHash = stackConfigHash();
+  const startedWith = existsSync(STACK_STAMP) ? readFileSync(STACK_STAMP, "utf8").trim() : "";
+  if (startedWith !== configHash) {
+    console.log("   the test stack's settings changed since it started: restarting this project's stack");
+    tool("supabase", ["stop", "--workdir", E2E_WORKDIR]); // stops only the project_id in e2e/supabase/config.toml
+  }
   if (tool("supabase", ["start", "--workdir", E2E_WORKDIR]) !== 0) fail("the local Supabase stack did not start.");
+  mkdirSync(path.dirname(STACK_STAMP), { recursive: true });
+  writeFileSync(STACK_STAMP, configHash);
   checkPortOwner();
 
   const info = status();
@@ -115,7 +144,7 @@ export async function prepareDatabase() {
     users[role] = { email, password };
   }
 
-  step("Applying migrations 0001 to 0006");
+  step("Applying the migrations in order");
   const migrations = readdirSync(path.join(ROOT, "supabase", "migrations")).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
   for (const file of migrations) {
     psqlFile(path.join("supabase", "migrations", file));

@@ -1,0 +1,9 @@
+<!-- Supabase Auth "Invite user" email (T-03). Paste into the dashboard:
+     Authentication > Emails > Invite user. Subject: You're invited to Affiqube
+     The link opens a page with a Continue button; nothing is used until it is pressed. -->
+<h2>You're invited to Affiqube</h2>
+<p>You have been invited to Affiqube, where Vividha Marketing runs digital marketing for its clients.</p>
+<p>Press the button below. You will choose a password next, then see who invited you and with which role.</p>
+<p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite">Accept the invitation</a></p>
+<p>This link works once and expires soon. If it has expired, ask the person who invited you to send it again.</p>
+<p>If you were not expecting this, you can ignore this email; nothing happens unless you press the button.</p>

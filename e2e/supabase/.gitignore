@@ -6,3 +6,6 @@
 .env.keys
 .env.local
 .env.*.local
+
+# Copies of supabase/email-templates, made by scripts/e2e-db.mjs
+templates

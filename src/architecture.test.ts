@@ -52,6 +52,21 @@ describe("architecture rules", () => {
     });
   }
 
+  it("the service role key is never read under a browser-visible name", () => {
+    const offenders = sourceFiles(SRC).filter((file) => /NEXT_PUBLIC_[A-Z_]*SERVICE/.test(readFileSync(file, "utf8")));
+    expect(offenders.map((file) => path.relative(SRC, file))).toEqual([]);
+  });
+
+  it("only server code imports the server-only email sender (core/supabase/admin)", () => {
+    const admin = path.join(SRC, "core", "supabase", "admin");
+    const importers = sourceFiles(SRC).filter((file) => importsOf(file).includes(admin));
+    expect(importers.length).toBeGreaterThan(0);
+    for (const file of importers) {
+      expect(readFileSync(file, "utf8"), path.relative(SRC, file)).toMatch(/^\s*["']use server["']/);
+    }
+    expect(readFileSync(`${admin}.ts`, "utf8")).toMatch(/^import "server-only";/);
+  });
+
   it("finds imports at all (guards against a scan that silently checks nothing)", () => {
     const coreFiles = sourceFiles(path.join(SRC, "core"));
     expect(coreFiles.length).toBeGreaterThan(5);

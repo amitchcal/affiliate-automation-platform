@@ -14,5 +14,12 @@ create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
 grant usage on schema auth to authenticated, anon;
--- Stand-in for Supabase's auth.users, used only by the seed test.
+-- The session's claims, as Supabase's auth.jwt() returns them. Tests set
+-- request.jwt.claims (for example {"aal": "aal2"}) when they need a claim.
+create or replace function auth.jwt() returns jsonb language sql stable as $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
+$$;
+grant usage on schema auth to authenticated, anon;
+-- Stand-in for Supabase's auth.users: the columns the migrations and tests read.
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text unique);
+alter table auth.users add column if not exists email_confirmed_at timestamptz;

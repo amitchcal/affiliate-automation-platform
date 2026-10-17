@@ -1,0 +1,7 @@
+<!-- Supabase Auth "Magic link" email (T-03). Paste into the dashboard:
+     Authentication > Emails > Magic link. Subject: Your Affiqube sign-in link
+     Sent for "Email me a sign-in link", and to people with an account who are invited to another client. -->
+<h2>Your Affiqube sign-in link</h2>
+<p>Press the button below to sign in to Affiqube. If someone has invited you to a client, the invitation will be waiting after you sign in.</p>
+<p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink">Sign in to Affiqube</a></p>
+<p>This link works once and expires soon. If you did not ask for it, you can ignore this email.</p>
