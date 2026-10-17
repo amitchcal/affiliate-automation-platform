@@ -12,8 +12,10 @@ insert into memberships (user_id, client_id, role) values
   ('00000000-0000-0000-0000-0000000000a2', 'aaaaaaaa-0000-0000-0000-000000000000', 'client_viewer'),
   ('00000000-0000-0000-0000-0000000000b1', 'bbbbbbbb-0000-0000-0000-000000000000', 'client_admin');
 insert into brands (id, client_id, name, domain, profile) values
-  ('aaaaaaaa-1111-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Brand A', 'brand-a.test',
+  ('aaaaaaaa-1111-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Brand A', 'brand-a-test.com',
    '{"tagline":"Plain overviews","operator":"Operator A","email":"hello@brand-a.test","address":"1 Street","internal_note":"never public"}');
+-- Its site is live on a verified host (0010; test stand-in, supabase/tests/local_sites.sql).
+select test_make_live('aaaaaaaa-1111-0000-0000-000000000000');
 insert into offers (id, client_id, brand_id, name, network, affiliate_link) values
   ('aaaaaaaa-2222-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000',
    'aaaaaaaa-1111-0000-0000-000000000000', 'Offer A', 'clickbank', 'https://seller.test/hop');
@@ -52,7 +54,11 @@ end $$;
 -- ---------- create the standard pages and an offer page, all as drafts ----------
 insert into site_pages (client_id, brand_id, kind, slug, title, draft_body, template_key)
 select 'aaaaaaaa-0000-0000-0000-000000000000', 'aaaaaaaa-1111-0000-0000-000000000000',
-       'standard', key, title, body, key
+       'standard', key, title,
+       -- Filled as the screen fills them (C-04); 0012 refuses to publish a standard page with a placeholder left.
+       replace(replace(replace(replace(replace(body, '{{brand}}', 'Brand A'), '{{domain}}', 'brand-a-test.com'),
+         '{{operator}}', 'Operator A'), '{{address}}', '1 Street'), '{{email}}', 'hello@brand-a.test'),
+       key
 from compliance_templates;
 
 insert into site_pages (id, client_id, brand_id, kind, slug, title, summary, draft_body, offer_id)
@@ -130,23 +136,25 @@ begin
   if (select count(*) from tracked_links) <> 0 then raise exception 'T-02: a visitor can read tracked links'; end if;
   if (select count(*) from brands) <> 0 then raise exception 'T-02: a visitor can read brands'; end if;
 
-  -- Host matching ignores case, "www." and a port.
-  if (select name from public_brand('WWW.Brand-A.test:443')) <> 'Brand A' then raise exception 'S-01: brand not found by host'; end if;
-  if (select tagline from public_brand('brand-a.test')) <> 'Plain overviews' then raise exception 'S-01: tagline missing'; end if;
-  if (select count(*) from public_brand('unknown.test')) <> 0 then raise exception 'S-01: unknown host returned a brand'; end if;
+  -- Host matching ignores case, a port and a trailing dot; since 0010 it no
+  -- longer strips "www." (a www host is a host of its own, verified separately).
+  if (select name from public_brand('Brand-A-Test.com.:443')) <> 'Brand A' then raise exception 'S-01: brand not found by host'; end if;
+  if (select count(*) from public_brand('www.brand-a-test.com')) <> 0 then raise exception 'S-01: an unlisted www host was served'; end if;
+  if (select tagline from public_brand('brand-a-test.com')) <> 'Plain overviews' then raise exception 'S-01: tagline missing'; end if;
+  if (select count(*) from public_brand('unknown-test.com')) <> 0 then raise exception 'S-01: unknown host returned a brand'; end if;
 
-  if (select count(*) from public_pages('brand-a.test')) <> 5 then raise exception 'S-05: expected 5 published pages'; end if;
+  if (select count(*) from public_pages('brand-a-test.com')) <> 5 then raise exception 'S-05: expected 5 published pages'; end if;
 
-  select * into page from public_page('brand-a.test', 'offer-a');
+  select * into page from public_page('brand-a-test.com', 'offer-a');
   if page.body <> 'Body of the overview.' then raise exception 'S-03: visitors see unpublished draft text'; end if;
   if page.cta_link <> 'offer-a' then raise exception 'S-07: page has no site link'; end if;
 
   -- S-07: a click is recorded and the destination returned with ?tid= appended.
-  destination := record_click('brand-a.test', 'offer-a', 'offer-a', 'pinterest.com');
+  destination := record_click('brand-a-test.com', 'offer-a', 'offer-a', 'pinterest.com');
   if destination not like 'https://seller.test/hop?tid=________' then
     raise exception 'S-07: wrong destination (got %)', destination;
   end if;
-  if record_click('brand-a.test', 'no-such-link') is not null then raise exception 'S-07: unknown link returned a destination'; end if;
+  if record_click('brand-a-test.com', 'no-such-link') is not null then raise exception 'S-07: unknown link returned a destination'; end if;
   if (select count(*) from click_events) <> 0 then raise exception 'T-02: a visitor can read click records'; end if;
 end $$;
 
@@ -179,8 +187,8 @@ update site_pages set status = 'draft' where slug = 'contact';
 set local role anon;
 do $$
 begin
-  if record_click('brand-a.test', 'offer-a') is not null then raise exception 'S-07: a retired offer still redirects'; end if;
-  if (select count(*) from public_page('brand-a.test', 'contact')) <> 0 then raise exception 'S-03: an unpublished page is still visible'; end if;
+  if record_click('brand-a-test.com', 'offer-a') is not null then raise exception 'S-07: a retired offer still redirects'; end if;
+  if (select count(*) from public_page('brand-a-test.com', 'contact')) <> 0 then raise exception 'S-03: an unpublished page is still visible'; end if;
 end $$;
 rollback;
 

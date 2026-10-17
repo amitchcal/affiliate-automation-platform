@@ -17,8 +17,9 @@ insert into memberships (user_id, client_id, role) values
   ('00000000-0000-0000-0000-0000000000c2', 'cccccccc-0000-0000-0000-000000000000', 'client_viewer'),
   ('00000000-0000-0000-0000-0000000000d1', 'dddddddd-0000-0000-0000-000000000000', 'client_admin');
 insert into brands (id, client_id, name, domain) values
-  ('cccccccc-1111-0000-0000-000000000000', 'cccccccc-0000-0000-0000-000000000000', 'Brand C', 'brand-c.test'),
-  ('dddddddd-1111-0000-0000-000000000000', 'dddddddd-0000-0000-0000-000000000000', 'Brand D', 'brand-d.test');
+  ('cccccccc-1111-0000-0000-000000000000', 'cccccccc-0000-0000-0000-000000000000', 'Brand C', 'brand-c-test.com'),
+  ('dddddddd-1111-0000-0000-000000000000', 'dddddddd-0000-0000-0000-000000000000', 'Brand D', 'brand-d-test.com');
+select test_make_live('cccccccc-1111-0000-0000-000000000000');
 insert into offers (id, client_id, brand_id, name, network) values
   ('cccccccc-2222-0000-0000-000000000000', 'cccccccc-0000-0000-0000-000000000000',
    'cccccccc-1111-0000-0000-000000000000', 'Offer C', 'clickbank');
@@ -66,7 +67,7 @@ select set_config('request.jwt.claim.sub', '', true);
 do $$
 declare dest text; tid_val text;
 begin
-  dest    := record_click('brand-c.test', 'offer-c');
+  dest    := record_click('brand-c-test.com', 'offer-c');
   tid_val := substring(dest from '[?&]tid=([^&#]+)');
   if tid_val is null then
     raise exception 'P-01: no tid parameter in destination (got %)', dest;
@@ -90,7 +91,7 @@ select set_config('request.jwt.claim.sub', '', true);
 do $$
 declare dest text; tid_val text;
 begin
-  dest    := record_click('brand-c.test', 'offer-c');
+  dest    := record_click('brand-c-test.com', 'offer-c');
   tid_val := substring(dest from '[?&]tid=([^&#]+)');
   if dest like '%oldcode%' then
     raise exception 'P-01: old tid value was not replaced (got %)', dest;
@@ -118,7 +119,7 @@ select set_config('request.jwt.claim.sub', '', true);
 do $$
 declare dest text; tid_val text;
 begin
-  dest    := record_click('brand-c.test', 'offer-c');
+  dest    := record_click('brand-c-test.com', 'offer-c');
   tid_val := substring(dest from '[?&]tid=([^&#]+)');
   if tid_val is null or length(tid_val) <> 8 then
     raise exception 'P-01: tid missing or wrong length with fragment (got %)', dest;

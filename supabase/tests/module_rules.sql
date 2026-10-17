@@ -28,11 +28,15 @@ insert into memberships (user_id, client_id, role) values
   ('00000000-0000-0000-0000-0000000000a3', 'aaaaaaaa-0000-0000-0000-000000000000', 'operator');
 
 insert into brands (id, client_id, name, domain, business_type) values
-  ('aaaaaaaa-1111-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Aff Brand',    'aff.test',    'affiliate'),
-  ('aaaaaaaa-1112-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Drop Brand',   'drop.test',   'dropshipping'),
-  ('aaaaaaaa-1113-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Both Brand',   'both.test',   'both'),
-  ('aaaaaaaa-1114-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Switch Brand', 'switch.test', 'affiliate'),
-  ('bbbbbbbb-1112-0000-0000-000000000000', 'bbbbbbbb-0000-0000-0000-000000000000', 'Secret Brand', 'b-drop.test', 'dropshipping');
+  ('aaaaaaaa-1111-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Aff Brand',    'aff-test.com',    'affiliate'),
+  ('aaaaaaaa-1112-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Drop Brand',   'drop-test.com',   'dropshipping'),
+  ('aaaaaaaa-1113-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Both Brand',   'both-test.com',   'both'),
+  ('aaaaaaaa-1114-0000-0000-000000000000', 'aaaaaaaa-0000-0000-0000-000000000000', 'Switch Brand', 'switch-test.com', 'affiliate'),
+  ('bbbbbbbb-1112-0000-0000-000000000000', 'bbbbbbbb-0000-0000-0000-000000000000', 'Secret Brand', 'b-drop-test.com', 'dropshipping');
+
+-- Every brand's site is live on a verified host (0010; test stand-in), so the
+-- public functions below are refused by the module check alone.
+select test_make_live(id) from brands;
 
 -- The switch brand: an approved offer with its rules, a tracked link, and a published standard page.
 insert into offers (id, client_id, brand_id, name, network) values
@@ -91,9 +95,9 @@ end $$;
 -- ---------- Before the switch, the switch brand's public site works ----------
 do $$
 begin
-  if (select count(*) from public_brand('switch.test')) <> 1 then raise exception 'setup: switch brand site not found'; end if;
-  if (select count(*) from public_pages('switch.test')) <> 1 then raise exception 'setup: switch brand pages not found'; end if;
-  if record_click('switch.test', 'go1') is null then raise exception 'setup: switch brand link not working'; end if;
+  if (select count(*) from public_brand('switch-test.com')) <> 1 then raise exception 'setup: switch brand site not found'; end if;
+  if (select count(*) from public_pages('switch-test.com')) <> 1 then raise exception 'setup: switch brand pages not found'; end if;
+  if record_click('switch-test.com', 'go1') is null then raise exception 'setup: switch brand link not working'; end if;
 end $$;
 
 -- ---------- The owner switches the brand to dropshipping; the change is logged ----------
@@ -180,13 +184,13 @@ do $$
 declare
   clicks_before bigint := (select count(*) from click_events);
 begin
-  if (select count(*) from public_brand('switch.test')) <> 0 then raise exception 'T-07: public_brand serves a switched brand'; end if;
-  if (select count(*) from public_pages('switch.test')) <> 0 then raise exception 'T-07: public_pages serves a switched brand'; end if;
-  if (select count(*) from public_page('switch.test', 'contact')) <> 0 then raise exception 'T-07: public_page serves a switched brand'; end if;
-  if record_click('switch.test', 'go1') is not null then raise exception 'T-07: record_click redirects for a switched brand'; end if;
+  if (select count(*) from public_brand('switch-test.com')) <> 0 then raise exception 'T-07: public_brand serves a switched brand'; end if;
+  if (select count(*) from public_pages('switch-test.com')) <> 0 then raise exception 'T-07: public_pages serves a switched brand'; end if;
+  if (select count(*) from public_page('switch-test.com', 'contact')) <> 0 then raise exception 'T-07: public_page serves a switched brand'; end if;
+  if record_click('switch-test.com', 'go1') is not null then raise exception 'T-07: record_click redirects for a switched brand'; end if;
   if (select count(*) from click_events) <> clicks_before then raise exception 'T-07: a click was recorded for a switched brand'; end if;
-  if (select count(*) from public_brand('drop.test')) <> 0 then raise exception 'T-07: public_brand serves a dropshipping brand'; end if;
-  if (select count(*) from public_brand('both.test')) <> 1 then raise exception 'T-07: public_brand hides a brand of type both'; end if;
+  if (select count(*) from public_brand('drop-test.com')) <> 0 then raise exception 'T-07: public_brand serves a dropshipping brand'; end if;
+  if (select count(*) from public_brand('both-test.com')) <> 1 then raise exception 'T-07: public_brand hides a brand of type both'; end if;
 end $$;
 
 -- ---------- Only the owner and operators may change a business type ----------
