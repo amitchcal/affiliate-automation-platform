@@ -39,6 +39,24 @@ export const DB_CONTAINER = `supabase_db_${E2E_PROJECT_ID}`;
 // git ignores e2e/.run/. E2E_RUN_FILE overrides it only for the guard's own tests;
 // whatever file is read, readRun() still refuses any address but the test stack's.
 export const RUN_FILE = process.env.E2E_RUN_FILE || path.join(ROOT, "e2e", ".run", "run.json");
+// Batch 2 (S-01): the DNS answers the test application gets instead of real
+// DNS, written by the tests. The application accepts this only with the local
+// stack's address (src/core/domains/resolver.ts). Ignored by git, like run.json.
+export const DNS_FAKE_FILE = path.join(path.dirname(RUN_FILE), "dns.json");
+// What a brand's domain must point at, as Vercel would show it.
+export const DNS_TARGETS = { cname: "cname.vercel-dns.com", a: "76.76.21.21" };
+// Brand hosts the test browser sends to the local application (Chromium's
+// host-resolver rule), so no real DNS and no outside site is ever used.
+export const TEST_BRAND_HOSTS = [
+  "affilyvault.com",
+  "go.affilyvault.com",
+  "launch-one-e2e.com",
+  "go.launch-one-e2e.com",
+  "www.launch-one-e2e.com",
+  "launch-two-e2e.com",
+  "unknown-e2e.com",
+  "launch-one-e2e.com.evil-e2e.com",
+];
 export const DIST_DIR = ".next-e2e";
 export const APP_PORT = 3100;
 /** The local mail catcher (Mailpit). Every email the test stack sends lands here; none leaves the machine. */
@@ -200,6 +218,9 @@ export function appEnv(run, serviceKey) {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: run.anonKey,
     ADMIN_HOSTS: "localhost,127.0.0.1",
     CLICKBANK_API_KEY: "",
+    E2E_DNS_FAKE_FILE: DNS_FAKE_FILE,
+    SITE_DNS_CNAME_TARGETS: DNS_TARGETS.cname,
+    SITE_DNS_A_TARGETS: DNS_TARGETS.a,
     ...(serviceKey ? { SUPABASE_SERVICE_ROLE_KEY: serviceKey } : {}),
   };
 }

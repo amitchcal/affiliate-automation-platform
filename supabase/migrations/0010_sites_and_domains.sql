@@ -14,6 +14,8 @@
 --     live only when the launch checklist passes, checked here, in the
 --     database; the owner and operators go live, client admins may take a
 --     site offline;
+--   * while a site is live, its published standard pages (the compliance
+--     text) cannot be unpublished or deleted;
 --   * visitors see a site only on a verified Site host of a live site, matched
 --     exactly (no www. stripping, no suffix match, no fallback). A Links host
 --     serves tracked-link redirects only;
@@ -142,17 +144,24 @@ begin
   if not found then raise exception 'domain_not_found'; end if;
 
   if p_ok then
+    -- Any other verified row for the host, of another client or of another
+    -- brand of the same client, keeps it (addition 2; owner's review change 5).
     if exists (
       select 1 from brand_domains d
-      where d.host = v_row.host and d.status = 'verified' and d.id <> v_row.id and d.client_id <> v_row.client_id
+      where d.host = v_row.host and d.status = 'verified' and d.id <> v_row.id
     ) then
       raise exception 'domain_taken';
     end if;
-    update brand_domains d
-       set status = 'verified', verified_at = now(), checked_at = now(), check_ok = true,
-           check_reason = null, failed_since = null
-     where d.id = p_domain
-    returning * into v_row;
+    begin
+      update brand_domains d
+         set status = 'verified', verified_at = now(), checked_at = now(), check_ok = true,
+             check_reason = null, failed_since = null
+       where d.id = p_domain
+      returning * into v_row;
+    exception when unique_violation then
+      -- Two checks of the same host at the same moment: the second one loses.
+      raise exception 'domain_taken';
+    end;
   else
     if p_reason is null or p_reason not in ('txt_missing', 'txt_wrong', 'not_pointing', 'lookup_failed') then
       raise exception 'domain_bad_reason';
@@ -275,6 +284,7 @@ begin
     raise exception 'site_not_allowed';
   end if;
   if not can_manage(v_site.client_id) then raise exception 'site_not_allowed'; end if;
+  if v_site.status = 'live' then raise exception 'site_already_live'; end if;
   select string_agg(c.key, ',') into v_failing from site_launch_checklist(p_brand) c where not c.passed;
   if v_failing is not null then
     raise exception 'site_not_ready' using detail = v_failing;
@@ -307,6 +317,25 @@ begin
           jsonb_build_object('status', 'live'), jsonb_build_object('status', 'offline'));
 end;
 $$;
+
+-- Owner's review change 1: while a site is live (and served: affiliate module
+-- on), its published standard pages stay published. Unpublishing one, or
+-- deleting it, is refused with page_site_live; take the site offline first.
+create or replace function site_pages_keep_standard_live() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if old.kind = 'standard' and old.status = 'published'
+     and (tg_op = 'DELETE' or new.status <> 'published')
+     and exists (select 1 from aff_sites s where s.brand_id = old.brand_id and s.status = 'live')
+     and brand_has_module(old.brand_id, 'affiliate') then
+    raise exception 'page_site_live';
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+drop trigger if exists site_pages_keep_standard_live on site_pages;
+create trigger site_pages_keep_standard_live before update or delete on site_pages
+  for each row execute function site_pages_keep_standard_live();
 
 -- ----------------------------------------------------------------------------
 -- 4. Which brand a visitor's host belongs to: exact match only (addition 3).
@@ -502,7 +531,7 @@ begin
   execute 'grant execute on function record_domain_check(uuid, uuid, boolean, text) to service_role';
   -- Used only inside other functions.
   foreach f in array array['site_brand_for_host(text)', 'links_brand_for_host(text)',
-                           'brand_domains_before_insert()'] loop
+                           'brand_domains_before_insert()', 'site_pages_keep_standard_live()'] loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
   end loop;
   -- Pure checks, harmless to anyone signed in (the screen validates with them).

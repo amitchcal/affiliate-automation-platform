@@ -3,10 +3,11 @@
 // public site, a tracked click, and a new tracked link. The click's redirect to
 // the seller is stopped inside the browser, so no outside site is called.
 import { expect, test, type Page } from "@playwright/test";
-import { alert, IDS, notice, signIn, snap, stopOutsideRequests } from "./support/helpers";
+import { alert, brandUrl, hostCode, IDS, notice, proveHost, rawGet, signIn, snap, stopOutsideRequests } from "./support/helpers";
 
 const SITE = `/brands/${IDS.affilyvault}/site`;
-const PUBLIC = "/site/affilyvault.com";
+const PUBLIC = "/site/affilyvault.com"; // the preview, for members of the client
+const LIVE = "affilyvault.com"; // the brand's own domain, once the site is live (batch 2)
 
 const section = (page: Page, id: string) => page.locator(`section[aria-labelledby=${id}]`);
 const pageRow = (page: Page, title: string) =>
@@ -91,14 +92,33 @@ test("the wording check refuses an unsupported superlative in an article", async
   await expect(notice(page)).toHaveText("Published.");
 });
 
+test("AffilyVault goes live on its own domain once the domain is proven (S-01)", async ({ page }) => {
+  await page.goto(SITE);
+  const launch = section(page, "launch");
+  await expect(launch.locator("[data-site-status]")).toHaveText("Draft: not visible to the public.");
+  await expect(launch.locator('[data-check="standard_pages"]')).toHaveAttribute("data-passed", "yes");
+  await expect(launch.locator('[data-check="domain"]')).toHaveAttribute("data-passed", "no");
+  await expect(launch.getByRole("button", { name: "Go live" })).toBeDisabled();
+
+  // The brand's domain is listed (0010 added it, waiting for a check); its DNS now proves it.
+  proveHost(LIVE, hostCode(LIVE, IDS.affilyvault));
+  await section(page, "domains").locator(`li[data-host="${LIVE}"]`).getByRole("button", { name: "Check domain" }).click();
+  await expect(notice(page)).toHaveText(`${LIVE} is verified.`);
+  await expect(section(page, "launch").locator('[data-check="domain"]')).toHaveAttribute("data-passed", "yes");
+  await section(page, "launch").getByRole("button", { name: "Go live" }).click();
+  await expect(notice(page)).toHaveText("The site is live. Visitors can now see it on its verified domain.");
+  await expect(section(page, "launch").locator("[data-site-status]")).toHaveAttribute("data-site-status", "live");
+  await snap(page, "site-05a-live");
+});
+
 test("the public site lists the pages, and a click is recorded before the seller", async ({ page }) => {
   const stopped = await stopOutsideRequests(page);
-  await page.goto(PUBLIC);
+  await page.goto(brandUrl(LIVE));
   await expect(page.getByRole("link", { name: /Pet Sleep Guide: Overview/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Choosing a dog crate/ })).toBeVisible();
   await snap(page, "site-05-public-home");
 
-  await page.goto(`${PUBLIC}/pet-sleep-guide`);
+  await page.goto(brandUrl(LIVE, "/pet-sleep-guide"));
   await expect(page.locator("article")).toContainText("An overview of Pet Sleep Guide");
   await expect(page.locator(".disclosure")).toContainText("independent affiliate");
   await snap(page, "site-06-public-offer-page");
@@ -107,13 +127,12 @@ test("the public site lists the pages, and a click is recorded before the seller
   // redirect past the browser's request stop. So the test requests the
   // button's own address without following redirects: the click is recorded,
   // and the redirect's target is checked without ever being visited.
+  // The request is sent with the brand's own Host header, as the visitor's browser would.
   const button = page.getByRole("link", { name: "See it on the official site" }).first();
-  const response = await page.request.get((await button.getAttribute("href"))!, {
-    maxRedirects: 0,
-    headers: { referer: page.url() },
-  });
-  expect(response.status()).toBe(302);
-  expect(response.headers()["location"]).toMatch(/^https:\/\/seller\.example\/pet-sleep-guide\?tid=[0-9a-f]{8}$/);
+  const href = (await button.getAttribute("href"))!;
+  const response = await rawGet(LIVE, href.startsWith("http") ? new URL(href).pathname + new URL(href).search : href);
+  expect(response.status).toBe(302);
+  expect(response.location).toMatch(/^https:\/\/seller\.example\/pet-sleep-guide\?tid=[0-9a-f]{8}$/);
   expect(stopped).toEqual([]);
 
   await page.goto(SITE);

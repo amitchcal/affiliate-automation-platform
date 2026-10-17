@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { failedHosts, failedHostWarning } from "@/core/domains/DomainWarnings";
 import { notFound } from "next/navigation";
 import { getClientUnmatched } from "@/modules/affiliate/results/results";
 import { StatusMessages } from "@/core/components/StatusMessages";
@@ -26,6 +27,8 @@ export default async function ClientPage({
     supabase.from("memberships").select("role, client_id"),
   ]);
   if (!client) notFound();
+  // Batch 2, addition 4: a live brand whose domain check failed is flagged in its row.
+  const warnings = await failedHosts(supabase, client.brands.map((brand) => brand.id));
   // People (T-03) is for the owner and this client's admins; the database enforces it.
   const managesPeople = (own ?? []).some(
     (row) => row.role === "owner" || (row.role === "client_admin" && row.client_id === clientId),
@@ -60,6 +63,13 @@ export default async function ClientPage({
                   {brand.niche ? `, ${brand.niche}` : ", niche not chosen"}
                 </span>
               </Link>
+              {warnings
+                .filter((host) => host.brand_id === brand.id)
+                .map((host) => (
+                  <p key={host.host} className="error" role="alert" data-warning="domain-check">
+                    {failedHostWarning(host)}
+                  </p>
+                ))}
             </li>
           ))}
         </ul>

@@ -25,6 +25,10 @@ select 'page versions are set only by the database',
              and pg_get_functiondef(to_regprocedure('public.site_pages_template_version()')) like '%page_template_version_locked%'
             then 'ok' else 'missing' end
 union all
+select 'a current policy must still contain the sign-up paragraph',
+       case when pg_get_functiondef(to_regprocedure('public.privacy_page_current(uuid)')) like '%if you sign up for updates.**%'
+            then 'ok' else 'no' end
+union all
 select 'sign-up needs the current Privacy Policy published',
        case when pg_get_functiondef(to_regprocedure('public.set_signup(uuid, boolean)')) like '%privacy_page_current%'
             then 'ok' else 'no' end

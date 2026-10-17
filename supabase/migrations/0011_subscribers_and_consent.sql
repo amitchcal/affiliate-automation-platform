@@ -11,7 +11,7 @@
 -- No email is sent until the email platform exists (batch 16), which sends
 -- the confirmation. No IP address, browser details, or name are stored.
 --
--- Visitors have one function, subscribe(), and no table access. The same
+-- Visitors have one function, subscribe() (in 0012), and no table access. The same
 -- answer comes back for a new address, a known one, and a filled honeypot.
 -- The owner, operators and the client's admins see subscribers; viewers see
 -- the count only. Deleting a subscriber leaves no email address anywhere in
@@ -147,61 +147,9 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 5. subscribe(): the visitor's only way in.
+-- 5. subscribe() and the form's wording are defined in 0012: they need the
+--    Privacy Policy check, which needs 0012's page versions.
 -- ----------------------------------------------------------------------------
-create or replace function subscribe(
-  p_host      text,
-  p_email     text,
-  p_page      text,
-  p_consented boolean,
-  p_honeypot  text default null
-) returns void
-language plpgsql security definer set search_path = public, pg_temp as $$
-declare
-  v_brand uuid := site_brand_for_host(p_host);
-  v_site aff_sites;
-  v_name text;
-  v_email text := lower(btrim(coalesce(p_email, '')));
-  v_consent record;
-begin
-  if v_brand is null then raise exception 'signup_unavailable'; end if;
-  select * into v_site from aff_sites where brand_id = v_brand;
-  if not v_site.signup_enabled then raise exception 'signup_unavailable'; end if;
-
-  -- A filled honeypot is a bot: the same answer as success, nothing stored.
-  if coalesce(btrim(p_honeypot), '') <> '' then return; end if;
-
-  if p_consented is not true then raise exception 'signup_no_consent'; end if;
-  if length(v_email) > 254 or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
-    raise exception 'signup_bad_email';
-  end if;
-  if (select count(*) from subscribers s
-      where s.brand_id = v_brand and s.consented_at > now() - interval '1 minute') >= 30 then
-    raise exception 'signup_rate_limited';
-  end if;
-
-  select b.name into v_name from brands b where b.id = v_brand;
-  select * into v_consent from current_consent_text('email_signup', v_name);
-
-  -- A known address keeps its original consent record; the answer is the same.
-  insert into subscribers (client_id, brand_id, email, consent_key, consent_version, consent_text,
-                           source_host, source_page)
-  values (v_site.client_id, v_brand, v_email, 'email_signup', v_consent.version, v_consent.body,
-          request_host(p_host), nullif(left(btrim(coalesce(p_page, '')), 200), ''))
-  on conflict (brand_id, email) do nothing;
-end;
-$$;
-
--- The form's wording for a live site with sign-up on, for visitors; nothing otherwise.
-create or replace function public_signup(p_host text)
-returns table (consent_version integer, consent_text text)
-language sql stable security definer set search_path = public, pg_temp as $$
-  select c.version, c.body
-  from aff_sites s
-  join brands b on b.id = s.brand_id
-  cross join lateral current_consent_text('email_signup', b.name) c
-  where s.brand_id = site_brand_for_host(p_host) and s.signup_enabled;
-$$;
 
 -- ----------------------------------------------------------------------------
 -- 6. Privileges.
@@ -210,10 +158,6 @@ do $$
 declare
   f text;
 begin
-  foreach f in array array['subscribe(text, text, text, boolean, text)', 'public_signup(text)'] loop
-    execute format('revoke all on function %s from public', f);
-    execute format('grant execute on function %s to anon, authenticated', f);
-  end loop;
   foreach f in array array['set_signup(uuid, boolean)', 'subscriber_count(uuid)'] loop
     execute format('revoke all on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);

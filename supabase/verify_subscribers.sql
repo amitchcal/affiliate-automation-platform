@@ -1,6 +1,6 @@
--- Email sign-up with recorded consent (S-08), migration 0011.
--- Run the whole file after applying 0011. Every row should read "ok"; the last
--- row is information.
+-- Email sign-up with recorded consent (S-08), migrations 0011 and 0012.
+-- Run the whole file after applying 0012 (subscribe() is defined there). Every
+-- row should read "ok"; the last row is information.
 select 'subscribers and consent_texts exist with row-level security' as check,
        case when (select count(*) from pg_class where relname in ('subscribers', 'consent_texts')
                   and relnamespace = 'public'::regnamespace and relrowsecurity) = 2
@@ -24,14 +24,25 @@ select 'viewers cannot read emails: the read policy is for owner, operators and 
             then 'ok' else 'no' end
 union all
 select 'visitors sign up only through subscribe() and read only the form wording',
-       case when has_function_privilege('anon', 'public.subscribe(text, text, text, boolean, text)', 'execute')
+       case when has_function_privilege('anon', 'public.subscribe(text, text, text, boolean, integer, text)', 'execute')
              and has_function_privilege('anon', 'public.public_signup(text)', 'execute')
              and not has_function_privilege('anon', 'public.set_signup(uuid, boolean)', 'execute')
              and not has_function_privilege('anon', 'public.subscriber_count(uuid)', 'execute')
             then 'ok' else 'no' end
 union all
 select 'the stored consent wording comes from consent_texts, not the request',
-       case when pg_get_functiondef(to_regprocedure('public.subscribe(text, text, text, boolean, text)')) like '%current_consent_text%'
+       case when pg_get_functiondef(to_regprocedure('public.subscribe(text, text, text, boolean, integer, text)')) like '%current_consent_text%'
+            then 'ok' else 'no' end
+union all
+select 'the form names its consent version; a changed wording is refused',
+       case when pg_get_functiondef(to_regprocedure('public.subscribe(text, text, text, boolean, integer, text)')) like '%signup_wording_changed%'
+             and to_regprocedure('public.subscribe(text, text, text, boolean, text)') is null
+            then 'ok' else 'no' end
+union all
+select 'sign-up works only while the Privacy Policy is current',
+       case when pg_get_functiondef(to_regprocedure('public.signup_brand_for_host(text)')) like '%privacy_page_current%'
+             and pg_get_functiondef(to_regprocedure('public.subscribe(text, text, text, boolean, integer, text)')) like '%signup_brand_for_host%'
+             and pg_get_functiondef(to_regprocedure('public.public_signup(text)')) like '%signup_brand_for_host%'
             then 'ok' else 'no' end
 union all
 select 'a deleted subscriber leaves no email address in the audit log',

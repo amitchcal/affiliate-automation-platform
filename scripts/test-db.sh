@@ -55,7 +55,13 @@ run_suite() {
   PGOPTIONS="-c affiqube.allow_owner_without_factor=on" $PSQL -d "$db" -f supabase/migrations/0009_two_factor.sql >/dev/null
   # A second run proves 0009 is safe to apply twice.
   PGOPTIONS="-c affiqube.allow_owner_without_factor=on" $PSQL -d "$db" -f supabase/migrations/0009_two_factor.sql >/dev/null
+  # Batch 2. A second run of each proves it is safe to apply twice.
+  for m in 0010_sites_and_domains 0011_subscribers_and_consent 0012_privacy_template_signup; do
+    $PSQL -d "$db" -f "supabase/migrations/$m.sql" >/dev/null
+    $PSQL -d "$db" -f "supabase/migrations/$m.sql" >/dev/null
+  done
   $PSQL -d "$db" -f supabase/tests/local_grants.sql >/dev/null
+  $PSQL -d "$db" -f supabase/tests/local_sites.sql >/dev/null
   # A failing test stops psql with an ERROR, so the suite's PASSED line never prints.
   local out
   if ! out=$($PSQL -d "$db" -f "$test_file" 2>&1); then
@@ -67,8 +73,8 @@ run_suite() {
   if [ "$guard_test" = yes ]; then recovery_sql_test "$db"; fi
 }
 
-# supabase/recovery/remove_two_factor.sql itself, with only the address filled
-# in, against the two-factor suite's users (T05-12, D4).
+# supabase/recovery/remove_two_factor.sql itself, with only the address and the
+# reason filled in, against the two-factor suite's users (T05-12, D4).
 recovery_sql_test() {
   local db="$1" left out
   $PSQL -d "$db" -c "
@@ -120,3 +126,6 @@ run_suite map_test_modules supabase/tests/module_rules.sql
 run_suite map_test_privacy supabase/tests/privacy_template_rules.sql
 run_suite map_test_invitations supabase/tests/invitation_rules.sql
 run_suite map_test_two_factor supabase/tests/two_factor_rules.sql yes
+run_suite map_test_site_launch supabase/tests/site_launch_rules.sql
+run_suite map_test_subscribers supabase/tests/subscriber_rules.sql
+run_suite map_test_privacy_signup supabase/tests/privacy_signup_rules.sql

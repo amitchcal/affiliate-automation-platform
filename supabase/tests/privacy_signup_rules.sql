@@ -208,6 +208,32 @@ begin
 end $$;
 rollback;
 
+-- ---------- Owner's review change 2: the sign-up paragraph must be in the published policy ----------
+begin;
+do $$
+declare
+  v_page uuid := (select id from site_pages where template_key = 'privacy');
+begin
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  perform update_page_from_template(v_page);
+  -- The paragraph is edited out of the draft, and the draft published as it is.
+  update site_pages
+     set draft_body = regexp_replace(draft_body, '- \*\*Your email address, if you sign up for updates\.\*\*[^\n]*\n?', '')
+   where id = v_page;
+  update site_pages set published_body = draft_body, status = 'published' where id = v_page;
+  perform test_superuser();
+  if position('if you sign up for updates' in (select published_body from site_pages where id = v_page)) > 0 then
+    raise exception 'setup: the paragraph should be gone';
+  end if;
+  if (select published_template_version from site_pages where id = v_page) <> 2 then raise exception 'setup: version 2 published'; end if;
+  if privacy_page_current('aaaaaaaa-1111-0000-0000-000000000001') then
+    raise exception 'S-08: a policy without the sign-up paragraph counted as current';
+  end if;
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  perform expect_refusal($q$select set_signup('aaaaaaaa-1111-0000-0000-000000000001', true)$q$, array['signup_privacy_outdated']);
+end $$;
+rollback;
+
 -- ---------- Owner's item 5: no sign-up without a contact email; no policy with {{email}} unfilled ----------
 begin;
 do $$

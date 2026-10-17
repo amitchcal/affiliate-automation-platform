@@ -6,6 +6,7 @@ import { createClient } from "@/core/supabase/server";
 import { checkContent, describeProblems } from "@/core/compliance/compliance";
 import { BusinessDetails, fillTemplate, missingDetails, offerPageStarter, slugify } from "@/modules/affiliate/site/site";
 import { requireAffiliate } from "@/modules/affiliate/guard";
+import { launchRefusalMessage, LAUNCH_REFUSALS } from "@/modules/affiliate/site/launch";
 
 function back(path: string, kind: "notice" | "error", message: string): never {
   redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
@@ -59,7 +60,7 @@ export async function createStandardPages(formData: FormData) {
   if (rows.length === 0) back(sitePath(brandId), "notice", "The standard pages already exist.");
 
   const { error } = await supabase.from("site_pages").insert(rows);
-  if (error) back(sitePath(brandId), "error", `The standard pages were not created: ${error.message}`);
+  if (error) back(sitePath(brandId), "error", `The standard pages were not created. ${launchRefusalMessage(error.message)}`);
 
   revalidatePath(sitePath(brandId));
   back(sitePath(brandId), "notice", `${rows.length} standard pages created as drafts. Review and publish each one.`);
@@ -259,7 +260,9 @@ export async function publishPage(formData: FormData) {
         ? "Not published. This page's offer is no longer approved."
         : error.message.includes("no content")
           ? "Not published. The page has no content yet."
-          : `Not published: ${error.message}`;
+          : error.message in LAUNCH_REFUSALS
+            ? launchRefusalMessage(error.message)
+            : "Not published. Try again, and if it keeps happening, tell the owner.";
     back(pagePath(brandId, pageId), "error", message);
   }
 
@@ -274,7 +277,7 @@ export async function unpublishPage(formData: FormData) {
   const supabase = await createClient();
   await requireAffiliate(supabase, brandId);
   const { error } = await supabase.from("site_pages").update({ status: "draft" }).eq("id", pageId);
-  if (error) back(pagePath(brandId, pageId), "error", `Not unpublished: ${error.message}`);
+  if (error) back(pagePath(brandId, pageId), "error", launchRefusalMessage(error.message));
   revalidatePath(pagePath(brandId, pageId));
   revalidatePath(sitePath(brandId));
   back(pagePath(brandId, pageId), "notice", "Unpublished. Visitors can no longer see this page.");

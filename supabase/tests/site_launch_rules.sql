@@ -474,6 +474,8 @@ begin
   perform test_login('00000000-0000-0000-0000-0000000000a3');
   if go_live_result('aaaaaaaa-1111-0000-0000-000000000002') <> 'site_not_set_up' then raise exception 'S-01: a brand without a site should say so'; end if;
   if go_live_result('aaaaaaaa-1111-0000-0000-000000000001') <> 'went live' then raise exception 'S-01: the operator should go live'; end if;
+  if go_live_result('aaaaaaaa-1111-0000-0000-000000000001') <> 'site_already_live' then raise exception 'S-01: going live twice should say so'; end if;
+  if (select count(*) from audit_log where action = 'site_go_live') <> 1 then raise exception 'S-01: a refused second go-live was audited'; end if;
   perform test_superuser();
   if (select status from aff_sites where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001') <> 'live' then raise exception 'S-01: not live'; end if;
   if (select went_live_by from aff_sites where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001') <> '00000000-0000-0000-0000-0000000000a3' then
@@ -602,6 +604,59 @@ begin
   -- A preview click records nothing.
   perform test_superuser();
   if exists (select 1 from click_events where page_slug = 'preview') then raise exception 'setup'; end if;
+end $$;
+rollback;
+
+-- ---------- Owner's review change 1: a live site keeps its standard pages published ----------
+begin;
+do $$
+declare
+  v_terms uuid := (select id from site_pages where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001' and template_key = 'terms');
+begin
+  perform test_superuser();
+  update aff_sites set status = 'live' where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001';
+  insert into site_pages (client_id, brand_id, kind, slug, title, draft_body, status, published_body, published_title)
+  values ('aaaaaaaa-0000-0000-0000-000000000000', 'aaaaaaaa-1111-0000-0000-000000000001', 'article', 'an-article', 'An article',
+          'Body', 'published', 'Body', 'An article');
+
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  perform expect_refusal(format($q$update site_pages set status = 'draft' where id = %L$q$, v_terms), array['page_site_live']);
+  perform expect_refusal(format($q$delete from site_pages where id = %L$q$, v_terms), array['page_site_live']);
+  perform test_login('00000000-0000-0000-0000-0000000000a0');
+  perform expect_refusal(format($q$update site_pages set status = 'draft' where id = %L$q$, v_terms), array['page_site_live']);
+  perform test_superuser();
+  perform expect_refusal(format($q$update site_pages set status = 'draft' where id = %L$q$, v_terms), array['page_site_live']);
+  -- Editing the draft, re-publishing, and unpublishing an article stay allowed.
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  update site_pages set draft_body = draft_body || ' Edited.' where id = v_terms;
+  update site_pages set status = 'draft' where slug = 'an-article';
+  perform test_superuser();
+  if (select status from site_pages where id = v_terms) <> 'published' then raise exception 'S-01: the terms page left published'; end if;
+  if (select status from site_pages where slug = 'an-article') <> 'draft' then raise exception 'S-01: an article could not be unpublished'; end if;
+
+  -- Offline: allowed again.
+  update aff_sites set status = 'offline' where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001';
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  update site_pages set status = 'draft' where id = v_terms;
+  perform test_superuser();
+  if (select status from site_pages where id = v_terms) <> 'draft' then raise exception 'S-01: offline, the page should unpublish'; end if;
+end $$;
+rollback;
+
+-- ---------- Owner's review change 5: the same client's second brand cannot verify a verified host ----------
+begin;
+do $$
+declare
+  v_second uuid;
+begin
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  insert into brand_domains (client_id, brand_id, host, purpose)
+  values ('aaaaaaaa-0000-0000-0000-000000000000', 'aaaaaaaa-1111-0000-0000-000000000002', 'brand-a-test.com', 'site')
+  returning id into v_second;
+  perform test_service();
+  perform expect_refusal(format('select record_domain_check(%L, null, true, null)', v_second), array['domain_taken']);
+  perform test_superuser();
+  if (select status from brand_domains where id = v_second) <> 'pending' then raise exception 'S-01: the second brand''s row changed'; end if;
 end $$;
 rollback;
 

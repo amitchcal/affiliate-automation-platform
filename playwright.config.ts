@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { APP_PORT, appEnv, localServiceKey, readRun } from "./scripts/e2e-lib.mjs";
+import { APP_PORT, appEnv, localServiceKey, readRun, TEST_BRAND_HOSTS } from "./scripts/e2e-lib.mjs";
 
 // readRun() stops here unless the prepared run points at the local test stack
 // (http://127.0.0.1:54421). Prepare it with: npm run test:e2e
@@ -23,6 +23,8 @@ export default defineConfig({
   reporter: [["list"], ["html", { outputFolder: "test-results/e2e/report", open: "never" }]],
   use: {
     ...devices["Desktop Chrome"],
+    // Brand hosts reach the local application only (batch 2): never real DNS.
+    launchOptions: { args: [`--host-resolver-rules=${TEST_BRAND_HOSTS.map((host) => `MAP ${host} 127.0.0.1`).join(", ")}`] },
     baseURL: `http://localhost:${APP_PORT}`,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

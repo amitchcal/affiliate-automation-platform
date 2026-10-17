@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createPublicClient } from "@/core/supabase/public";
+import { createClient } from "@/core/supabase/server";
 
 /**
  * S-07: every outbound click is recorded with its brand, offer, page, and
@@ -18,12 +19,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     referrerHost = null;
   }
 
-  const { data: destination } = await createPublicClient().rpc("record_click", {
-    p_host: host,
-    p_link: link,
-    p_page: request.nextUrl.searchParams.get("from"),
-    p_referrer_host: referrerHost,
-  });
+  // A preview on the admin host (S01-8): a member of the brand's client sees
+  // where the link goes, and no click is recorded.
+  const preview = request.headers.get("x-site-base") !== "root";
+  const { data: destination } = preview
+    ? await (await createClient()).rpc("preview_link", { p_domain: host, p_link: link })
+    : await createPublicClient().rpc("record_click", {
+        p_host: host,
+        p_link: link,
+        p_page: request.nextUrl.searchParams.get("from"),
+        p_referrer_host: referrerHost,
+      });
 
   const robots = { "X-Robots-Tag": "noindex, nofollow" };
   if (typeof destination === "string" && /^https?:\/\//i.test(destination)) {

@@ -1,6 +1,8 @@
 import { expect, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { DB_CONTAINER, docker, readRun, type Run } from "../../scripts/e2e-lib.mjs";
+import { writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { DB_CONTAINER, DNS_FAKE_FILE, DNS_TARGETS, docker, readRun, TEST_BRAND_HOSTS, type Run } from "../../scripts/e2e-lib.mjs";
 import { totp } from "./totp";
 
 /** Fixed ids from migrations 0002 and 0005 and from e2e/seed.sql. */
@@ -81,7 +83,7 @@ export async function dbAs(role: Role): Promise<SupabaseClient> {
 export async function stopOutsideRequests(page: Page): Promise<string[]> {
   const stopped: string[] = [];
   await page.context().route(
-    (url) => !["localhost", "127.0.0.1"].includes(url.hostname),
+    (url) => !["localhost", "127.0.0.1", ...TEST_BRAND_HOSTS].includes(url.hostname),
     async (route) => {
       stopped.push(route.request().url());
       await route.fulfill({ status: 200, contentType: "text/plain", body: "Stopped by the test: outside site." });
@@ -171,5 +173,56 @@ export async function postForm(page: Page, path: string, fields: Record<string, 
     multipart: fields,
     maxRedirects: 0,
     headers: { Origin: "http://localhost:3100" },
+  });
+}
+
+// ---------------------------------------------------------------- batch 2 (S-01, S-08)
+
+/** A brand host on the local application, as a visitor's browser reaches it. */
+export const brandUrl = (host: string, path = "/") => `http://${host}:3100${path}`;
+
+interface DnsEntry {
+  txt?: string[];
+  cname?: string[];
+  a?: string[];
+}
+const dns: Record<string, DnsEntry> = {};
+
+/**
+ * Sets the fake DNS answers for a host and its _affiqube. TXT name (other hosts
+ * keep theirs); the application reads them on each check.
+ */
+export function setDns(host: string, entry: DnsEntry, txt?: DnsEntry) {
+  dns[host] = entry;
+  if (txt) dns[`_affiqube.${host}`] = txt;
+  else delete dns[`_affiqube.${host}`];
+  writeFileSync(DNS_FAKE_FILE, JSON.stringify(dns, null, 2));
+}
+
+/** The DNS answers that prove a host: this row's code, and a pointer to the platform. */
+export function proveHost(host: string, code: string) {
+  setDns(host, { cname: [DNS_TARGETS.cname] }, { txt: [code] });
+}
+
+/** A host's verification code, read from the local test database. */
+export const hostCode = (host: string, brandId: string) =>
+  sqlOnTestDatabase(`select verification_code from brand_domains where host = '${host}' and brand_id = '${brandId}'`);
+
+/**
+ * A request with exactly this Host header (empty, or any name), straight to the
+ * local application, as a crafted request would come. No DNS involved.
+ */
+export function rawGet(host: string | null, path = "/"): Promise<{ status: number; body: string; location?: string }> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = {};
+    if (host !== null) headers.Host = host;
+    const req = httpRequest({ host: "127.0.0.1", port: 3100, path, method: "GET", headers, setHost: false }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body, location: res.headers.location }));
+    });
+    req.on("error", reject);
+    req.end();
   });
 }

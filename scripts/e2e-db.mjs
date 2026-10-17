@@ -30,6 +30,7 @@ import {
   MAIL_PORT,
   ROOT,
   RUN_FILE,
+  DNS_FAKE_FILE,
   tool,
 } from "./e2e-lib.mjs";
 import { totp } from "./totp.mjs";
@@ -188,6 +189,7 @@ export async function prepareDatabase() {
   psqlFile(path.join("e2e", "seed.sql"));
 
   mkdirSync(path.dirname(RUN_FILE), { recursive: true });
+  writeFileSync(DNS_FAKE_FILE, "{}\n"); // no DNS records until a test writes them
   writeFileSync(
     RUN_FILE,
     JSON.stringify({ supabaseUrl: LOCAL_SUPABASE_URL, anonKey, preparedAt: new Date().toISOString(), users }, null, 2),

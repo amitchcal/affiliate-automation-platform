@@ -40,7 +40,8 @@ export async function middleware(request: NextRequest) {
   // A brand's own domain: serve its public site from the root.
   if (!isAdminHost(host)) {
     const url = request.nextUrl.clone();
-    url.pathname = `/site/${host}${pathname === "/" ? "" : pathname}`;
+    // An empty Host still reaches the "not available" page, never another route.
+    url.pathname = `/site/${host || "-"}${pathname === "/" ? "" : pathname}`;
     return NextResponse.rewrite(url, { request: { headers: withSiteBase(request, "root") } });
   }
 

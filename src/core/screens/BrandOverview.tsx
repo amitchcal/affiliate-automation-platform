@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/core/supabase/server";
 import { savedValuesKey } from "@/core/form-key";
 import { StatusMessages } from "@/core/components/StatusMessages";
+import { DomainWarnings } from "@/core/domains/DomainWarnings";
 import { BUSINESS_TYPES, ModuleDefinition, modulesFor } from "@/core/modules";
 import { saveBusinessType, saveChoices, saveDetails } from "./brand-actions";
 
@@ -52,6 +53,7 @@ export default async function BrandOverview({
   return (
     <main className="stack">
       <StatusMessages notice={notice} error={error} />
+      <DomainWarnings supabase={supabase} brandId={brand.id} />
 
       <section className="stack" aria-labelledby="business-type">
         <div>

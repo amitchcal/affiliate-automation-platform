@@ -17,6 +17,9 @@
 -- 4. A standard page cannot be published with a placeholder such as {{email}}
 --    left unfilled, and "Update from template" refuses while the brand's
 --    business details are missing (so no placeholder is filled with nothing).
+-- 5. Visitors sign up through subscribe(), and see the form's wording through
+--    public_signup(), only while the Privacy Policy is current; subscribe()
+--    names the consent version the form showed, and a changed wording refuses.
 --
 -- One transaction. Safe to run more than once.
 -- =============================================================================
@@ -156,13 +159,16 @@ drop trigger if exists site_pages_no_placeholders on site_pages;
 create trigger site_pages_no_placeholders before insert or update on site_pages
   for each row execute function site_pages_no_placeholders();
 
--- The brand's published Privacy Policy is on the current template version.
+-- The brand's published Privacy Policy is on the current template version and
+-- still says what sign-up stores (owner's review change 2: the paragraph
+-- cannot be edited out of the draft before publishing).
 create or replace function privacy_page_current(p_brand uuid) returns boolean
 language sql stable security definer set search_path = public, pg_temp as $$
   select exists (
     select 1 from site_pages p join compliance_templates t on t.key = p.template_key
     where p.brand_id = p_brand and p.template_key = 'privacy' and p.status = 'published'
       and p.published_template_version = t.version
+      and position('**Your email address, if you sign up for updates.**' in p.published_body) > 0
   );
 $$;
 
@@ -234,7 +240,76 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- 5. Privileges.
+-- 5. subscribe(): the visitor's only way in (owner's review changes 3 and 4).
+-- ----------------------------------------------------------------------------
+-- A live site with sign-up on and a current Privacy Policy, for this host.
+create or replace function signup_brand_for_host(p_host text) returns uuid
+language sql stable security definer set search_path = public, pg_temp as $$
+  select s.brand_id
+  from aff_sites s
+  where s.brand_id = site_brand_for_host(p_host)
+    and s.signup_enabled
+    and privacy_page_current(s.brand_id);
+$$;
+
+drop function if exists subscribe(text, text, text, boolean, text);
+create or replace function subscribe(
+  p_host            text,
+  p_email           text,
+  p_page            text,
+  p_consented       boolean,
+  p_consent_version integer,
+  p_honeypot        text default null
+) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_brand uuid := signup_brand_for_host(p_host);
+  v_client uuid;
+  v_name text;
+  v_email text := lower(btrim(coalesce(p_email, '')));
+  v_consent record;
+begin
+  if v_brand is null then raise exception 'signup_unavailable'; end if;
+
+  -- A filled honeypot is a bot: the same answer as success, nothing stored.
+  if coalesce(btrim(p_honeypot), '') <> '' then return; end if;
+
+  if p_consented is not true then raise exception 'signup_no_consent'; end if;
+  select b.client_id, b.name into v_client, v_name from brands b where b.id = v_brand;
+  select * into v_consent from current_consent_text('email_signup', v_name);
+  -- The visitor agreed to the wording of the version the form showed; if it
+  -- has changed since, nothing is stored and the form is shown again.
+  if p_consent_version is distinct from v_consent.version then raise exception 'signup_wording_changed'; end if;
+  if length(v_email) > 254 or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    raise exception 'signup_bad_email';
+  end if;
+  if (select count(*) from subscribers s
+      where s.brand_id = v_brand and s.consented_at > now() - interval '1 minute') >= 30 then
+    raise exception 'signup_rate_limited';
+  end if;
+
+  -- A known address keeps its original consent record; the answer is the same.
+  insert into subscribers (client_id, brand_id, email, consent_key, consent_version, consent_text,
+                           source_host, source_page)
+  values (v_client, v_brand, v_email, 'email_signup', v_consent.version, v_consent.body,
+          request_host(p_host), nullif(left(btrim(coalesce(p_page, '')), 200), ''))
+  on conflict (brand_id, email) do nothing;
+end;
+$$;
+
+-- The form's wording and its version, for a site where subscribe() would
+-- work; nothing otherwise, so the form disappears.
+create or replace function public_signup(p_host text)
+returns table (consent_version integer, consent_text text)
+language sql stable security definer set search_path = public, pg_temp as $$
+  select c.version, c.body
+  from brands b
+  cross join lateral current_consent_text('email_signup', b.name) c
+  where b.id = signup_brand_for_host(p_host);
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 6. Privileges.
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -246,6 +321,11 @@ begin
   end loop;
   execute 'revoke all on function site_pages_template_version() from public, anon, authenticated';
   execute 'revoke all on function site_pages_no_placeholders() from public, anon, authenticated';
+  execute 'revoke all on function signup_brand_for_host(text) from public, anon, authenticated';
+  foreach f in array array['subscribe(text, text, text, boolean, integer, text)', 'public_signup(text)'] loop
+    execute format('revoke all on function %s from public', f);
+    execute format('grant execute on function %s to anon, authenticated', f);
+  end loop;
 end $$;
 
 commit;

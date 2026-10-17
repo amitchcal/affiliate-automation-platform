@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBrand, getPages, siteBase } from "@/modules/affiliate/site/public-site";
+import { getBrand, getPages, getSignup, isPreview, siteBase } from "@/modules/affiliate/site/public-site";
+import { SignupForm } from "./SignupForm";
 import "./site.css";
 
 /** The public shell of a brand's site: its name, and links to the standard pages (S-01, S-04). */
@@ -15,8 +16,8 @@ export default async function SiteLayout({
   const brand = await getBrand(host);
   if (!brand) notFound();
 
-  const base = await siteBase(host);
-  const standard = (await getPages(host)).filter((page) => page.kind === "standard");
+  const [base, pages, signup, preview] = await Promise.all([siteBase(host), getPages(host), getSignup(host), isPreview()]);
+  const standard = pages.filter((page) => page.kind === "standard");
 
   return (
     <div className="site">
@@ -32,6 +33,16 @@ export default async function SiteLayout({
       </main>
       <footer className="site-footer">
         <div className="wrap">
+          {signup ? (
+            <SignupForm
+              brandName={brand.name}
+              consentText={signup.consent_text}
+              consentVersion={signup.consent_version}
+              privacyHref={`${base}/privacy`}
+            />
+          ) : preview ? (
+            <p className="fine">Preview. The email sign-up form, when it is on, shows on the live site only.</p>
+          ) : null}
           {standard.length > 0 ? (
             <ul>
               {standard.map((page) => (

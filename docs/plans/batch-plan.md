@@ -25,6 +25,15 @@ Batch 1 is increment 6, already in progress; its plan is `docs/plans/increment-6
 | 15 | Refunds, payments, profit | Q-02, Q-03, Q-05, X-01, X-02, X-04 | Batch 14 |
 | 16 | Email marketing | E-01, E-02, E-03 | Batch 15, or earlier if the owner asks |
 
+**Batch 16 also includes (decided 17 October 2026, during batch 2):** consent wording **version 2** and the next Privacy Policy wording for email (template **version 3** in the database, because 0012 makes it version 2), covering:
+- the confirmation email (double opt-in);
+- deleting unconfirmed sign-ups after 30 days (needs the legal review, LG-05);
+- what is kept after someone unsubscribes.
+
+The owner reviews both before any real sign-up is switched on. Until then, sign-up stays off on every live site.
+
+**Gate before any real sign-up is switched on** (decided 17 October 2026): a per-visitor rate limit on the sign-up form, at the application or at the edge (for example Vercel's firewall rules), in addition to the per-brand limit in the database. It works from the request (for example the visitor's address, held in memory or at the edge only) and **stores no IP address in the database**.
+
 **Not yet batched:** the Should and Could stories not listed above. They are ordered when batch 15 closes.
 
 T-07 (business type switches modules) is built in increments 5 and 5.1 and is not in a batch. Its wizard re-run arrives with W-02 in batch 3.

@@ -5,6 +5,8 @@ import { savedValuesKey } from "@/core/form-key";
 import { StatusMessages } from "@/core/components/StatusMessages";
 import { BusinessDetails, missingDetails } from "@/modules/affiliate/site/site";
 import { createArticle, createLink, createOfferPage, createStandardPages } from "./actions";
+import { LaunchSections, rolesFor } from "./LaunchSections";
+import { updateFromTemplate } from "./launch-actions";
 
 interface PageRow {
   id: string;
@@ -18,6 +20,9 @@ interface PageRow {
   published_summary: string | null;
   published_body: string | null;
   offer_id: string | null;
+  template_key: string | null;
+  template_version: number | null;
+  published_template_version: number | null;
 }
 
 interface LinkRow {
@@ -56,12 +61,12 @@ export default async function BrandSitePage({
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, domain, profile")
+    .select("id, client_id, domain, profile")
     .eq("id", brandId)
     .maybeSingle();
   if (!brand) notFound();
 
-  const [{ data: pageRows }, { data: offerRows }, { data: linkRows, error: linksError }] = await Promise.all([
+  const [{ data: pageRows }, { data: offerRows }, { data: linkRows, error: linksError }, { data: templates }, roles] = await Promise.all([
     supabase.from("site_pages").select("*").eq("brand_id", brandId).order("created_at"),
     supabase.from("offers").select("id, name, status, affiliate_link").eq("brand_id", brandId).eq("status", "approved"),
     supabase
@@ -70,6 +75,8 @@ export default async function BrandSitePage({
       .select("id, slug, channel, campaign, creative, offer_id, click_events!click_events_link_id_fkey(count)")
       .eq("brand_id", brandId)
       .order("created_at"),
+    supabase.from("compliance_templates").select("key, version"),
+    rolesFor(supabase, brand.client_id),
   ]);
   if (linksError) throw new Error(`The tracked links could not be loaded: ${linksError.message}`);
 
@@ -87,6 +94,11 @@ export default async function BrandSitePage({
   const offersWithoutPage = offers.filter((offer) => !pages.some((page) => page.offer_id === offer.id));
   const offerName = (id: string) => offers.find((offer) => offer.id === id)?.name ?? "Offer";
   const previewBase = `/site/${brand.domain}`;
+  // Addition 5: a standard page made from an older template than the current one.
+  const templateVersion = (key: string | null) => (templates ?? []).find((template) => template.key === key)?.version ?? 1;
+  const outdated = standard.filter(
+    (page) => page.template_key && (page.template_version ?? 1) < templateVersion(page.template_key),
+  );
 
   return (
     <main className="stack">
@@ -97,6 +109,8 @@ export default async function BrandSitePage({
       </p>
 
       <StatusMessages notice={notice} error={error} />
+
+      <LaunchSections supabase={supabase} brand={brand} />
 
       <section className="stack" aria-labelledby="standard">
         <div>
@@ -122,6 +136,18 @@ export default async function BrandSitePage({
             </div>
           </form>
         ) : null}
+        {outdated.map((page) => (
+          <form key={page.id} action={updateFromTemplate} className="panel" data-outdated={page.slug}>
+            <input type="hidden" name="brand_id" value={brand.id} />
+            <input type="hidden" name="page_id" value={page.id} />
+            <p>A newer {page.title} template is available.</p>
+            {roles.canManage ? (
+              <div className="actions">
+                <button type="submit">Update from template</button>
+              </div>
+            ) : null}
+          </form>
+        ))}
         {standard.length > 0 ? <PageList brandId={brand.id} pages={standard} previewBase={previewBase} /> : null}
       </section>
 

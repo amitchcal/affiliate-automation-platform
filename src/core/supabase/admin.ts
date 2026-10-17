@@ -5,10 +5,11 @@ import { createClient } from "@supabase/supabase-js";
  * Sending invitation and sign-in emails through Supabase Auth (T-03).
  *
  * The service role key is read only here, from SUPABASE_SERVICE_ROLE_KEY: a
- * server-only variable, never NEXT_PUBLIC_, never committed. It is used for one
- * thing, inviteUserByEmail, and only after the database has accepted the
- * request (create_invitation or resend_invitation). Nothing here logs an
- * address, a link, or a key.
+ * server-only variable, never NEXT_PUBLIC_, never committed. It is used for two
+ * things, each only after the database has accepted the signed-in person's
+ * request: inviteUserByEmail (after create_invitation or resend_invitation,
+ * T-03), and recording a domain check's result (after can_check_domain, S-01).
+ * Nothing here logs an address, a link, or a key.
  */
 
 function noSession(key: string) {
@@ -47,4 +48,26 @@ export async function sendSignInLink(email: string): Promise<"sent" | "not_sent"
   });
   if (!error) return "sent";
   return error.status === 429 ? "rate_limited" : "not_sent";
+}
+
+/**
+ * S-01: records the server's DNS check of a host. Only the service role may
+ * (record_domain_check in 0010); the caller has already asked the database,
+ * as the signed-in person, whether that person may check this host.
+ */
+export async function recordDomainCheck(
+  domainId: string,
+  actorId: string,
+  ok: boolean,
+  reason: string | null,
+): Promise<{ error: string | null }> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return { error: "not_configured" };
+  const { error } = await noSession(serviceKey).rpc("record_domain_check", {
+    p_domain: domainId,
+    p_actor: actorId,
+    p_ok: ok,
+    p_reason: reason,
+  });
+  return { error: error ? error.message : null };
 }

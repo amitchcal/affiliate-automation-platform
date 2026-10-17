@@ -29,3 +29,9 @@
 .site-footer { border-top: 1px solid #e3e8ef; padding: 24px 0 40px; font-size: 0.9rem; color: #5b6478; }
 .site-footer ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 0; margin: 0 0 12px; }
 @media (max-width: 520px) { .site { font-size: 17px; } .site h1 { font-size: 1.7rem; } }
+
+/* Email sign-up (S-08). The honeypot field is off screen for people. */
+.signup { margin: 0 0 24px; }
+.signup form { display: grid; gap: 10px; max-width: 520px; }
+.signup .consent { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }

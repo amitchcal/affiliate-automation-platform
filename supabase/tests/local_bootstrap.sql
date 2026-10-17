@@ -52,3 +52,13 @@ begin
 end;
 $$;
 grant execute on function auth.test_session(text) to authenticated;
+
+-- Stand-in for Supabase's service_role (the server's key; batch 2, 0010):
+-- bypasses row-level security, signs in as nobody.
+do $$
+begin
+  create role service_role nologin bypassrls;
+exception when duplicate_object then null;
+end $$;
+grant usage on schema public to service_role;
+grant usage on schema auth to service_role;

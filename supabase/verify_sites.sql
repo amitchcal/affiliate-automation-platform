@@ -41,6 +41,10 @@ select 'going live checks the launch checklist; only owner and operators',
              and pg_get_functiondef(to_regprocedure('public.go_live(uuid)')) like '%can_manage%'
             then 'ok' else 'missing' end
 union all
+select 'a live site''s standard pages cannot be unpublished or deleted',
+       case when exists (select 1 from pg_trigger where tgname = 'site_pages_keep_standard_live')
+            then 'ok' else 'missing' end
+union all
 select 'visitors see only verified hosts of live sites, matched exactly',
        case when pg_get_functiondef(to_regprocedure('public.site_brand_for_host(text)')) like '%''verified''%'
              and pg_get_functiondef(to_regprocedure('public.site_brand_for_host(text)')) like '%''live''%'
@@ -57,14 +61,14 @@ select 'previews need a member of the brand''s client; visitors cannot call them
             then 'ok' else 'no' end
 union all
 select 'every function of 0010 fixes search_path to public, pg_temp',
-       case when count(*) = 19 and count(*) filter (where proconfig @> array['search_path=public, pg_temp']) = 19
+       case when count(*) = 20 and count(*) filter (where proconfig @> array['search_path=public, pg_temp']) = 20
             then 'ok' else (count(*) - count(*) filter (where proconfig @> array['search_path=public, pg_temp'])) || ' of ' || count(*) || ' do not' end
 from pg_proc
 where pronamespace = 'public'::regnamespace
   and proname in ('host_is_valid', 'request_host', 'brand_domains_before_insert', 'can_check_domain', 'record_domain_check',
                   'site_launch_checklist', 'set_up_site', 'go_live', 'take_offline', 'site_brand_for_host',
                   'links_brand_for_host', 'public_brand', 'public_pages', 'public_page', 'record_click',
-                  'preview_brand', 'preview_pages', 'preview_page', 'preview_link')
+                  'preview_brand', 'preview_pages', 'preview_page', 'preview_link', 'site_pages_keep_standard_live')
 union all
 select 'sites live now (information; right after 0010 this is 0)',
        (select count(*)::text from aff_sites where status = 'live')

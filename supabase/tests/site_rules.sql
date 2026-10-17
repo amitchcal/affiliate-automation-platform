@@ -183,12 +183,22 @@ end $$;
 -- ---------- a retired offer stops redirecting, and unpublishing hides the page ----------
 select test_login('00000000-0000-0000-0000-0000000000a0');
 update offers set status = 'retired' where id = 'aaaaaaaa-2222-0000-0000-000000000000';
-update site_pages set status = 'draft' where slug = 'contact';
+-- A standard page of a live site cannot be unpublished (0010): take the site offline first.
+do $$
+begin
+  update site_pages set status = 'draft' where slug = 'contact';
+  raise exception 'S-01: a standard page of a live site was unpublished';
+exception when others then
+  if sqlerrm <> 'page_site_live' then raise; end if;
+end $$;
+-- An article or offer page can be unpublished while the site is live.
+update site_pages set status = 'draft' where id = 'aaaaaaaa-3333-0000-0000-000000000000';
 set local role anon;
 do $$
 begin
   if record_click('brand-a-test.com', 'offer-a') is not null then raise exception 'S-07: a retired offer still redirects'; end if;
-  if (select count(*) from public_page('brand-a-test.com', 'contact')) <> 0 then raise exception 'S-03: an unpublished page is still visible'; end if;
+  if (select count(*) from public_page('brand-a-test.com', 'offer-a')) <> 0 then raise exception 'S-03: an unpublished page is still visible'; end if;
+  if (select count(*) from public_page('brand-a-test.com', 'contact')) <> 1 then raise exception 'S-01: the contact page should still be published'; end if;
 end $$;
 rollback;
 

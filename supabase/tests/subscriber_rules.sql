@@ -1,5 +1,5 @@
 -- =============================================================================
--- Email sign-up tests (S-08, batch 2, migration 0011). Run after every
+-- Email sign-up tests (S-08, batch 2, migrations 0011 and 0012). Run after every
 -- migration against a scratch database.
 --
 --   Client A: brand A1 (live on brand-a-test.com), brand A2 (draft, verified host)
@@ -25,7 +25,16 @@ insert into memberships (user_id, client_id, role) values
   ('00000000-0000-0000-0000-0000000000a3', 'aaaaaaaa-0000-0000-0000-000000000000', 'operator'),
   ('00000000-0000-0000-0000-0000000000b1', 'bbbbbbbb-0000-0000-0000-000000000000', 'client_admin');
 
--- Live sites (test stand-in, local_sites.sql); A2 stays draft on a verified host.
+-- Each brand's Privacy Policy published from the current template (0012), as
+-- sign-up needs; then live sites (test stand-in, local_sites.sql). A2 stays
+-- draft on a verified host.
+insert into site_pages (client_id, brand_id, kind, slug, title, template_key, draft_body)
+select b.client_id, b.id, 'standard', t.key, t.title, t.key,
+       replace(replace(replace(replace(replace(t.body, '{{brand}}', b.name), '{{domain}}', b.domain),
+           '{{operator}}', coalesce(b.profile ->> 'operator', '')), '{{address}}', coalesce(b.profile ->> 'address', '')),
+           '{{email}}', coalesce(b.profile ->> 'email', ''))
+from brands b, compliance_templates t where t.key = 'privacy';
+update site_pages set status = 'published', published_title = title, published_body = draft_body, published_at = now();
 select test_make_live('aaaaaaaa-1111-0000-0000-000000000001');
 select test_make_live('bbbbbbbb-1111-0000-0000-000000000001');
 select test_make_live('aaaaaaaa-1111-0000-0000-000000000002');
@@ -98,18 +107,18 @@ declare
 begin
   perform test_anon();
   -- Nothing is stored without the tick, a valid address, a live site, and the switch on.
-  perform expect_refusal($q$select subscribe('brand-a-test.com', 'pat@example.com', 'home', false)$q$, array['signup_no_consent']);
-  perform expect_refusal($q$select subscribe('brand-a-test.com', 'pat@example.com', 'home', null)$q$, array['signup_no_consent']);
-  perform expect_refusal($q$select subscribe('brand-a-test.com', 'not-an-address', 'home', true)$q$, array['signup_bad_email']);
-  perform expect_refusal($q$select subscribe('brand-a2-test.com', 'pat@example.com', 'home', true)$q$, array['signup_unavailable']);
-  perform expect_refusal($q$select subscribe('unknown-test.com', 'pat@example.com', 'home', true)$q$, array['signup_unavailable']);
-  perform expect_refusal($q$select subscribe('brand-a-test.com.evil.com', 'pat@example.com', 'home', true)$q$, array['signup_unavailable']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'pat@example.com', 'home', false, 1)$q$, array['signup_no_consent']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'pat@example.com', 'home', null, 1)$q$, array['signup_no_consent']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'not-an-address', 'home', true, 1)$q$, array['signup_bad_email']);
+  perform expect_refusal($q$select subscribe('brand-a2-test.com', 'pat@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
+  perform expect_refusal($q$select subscribe('unknown-test.com', 'pat@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com.evil.com', 'pat@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
   perform test_superuser();
   if exists (select 1 from subscribers) then raise exception 'S-08: a refused sign-up stored something'; end if;
 
   -- Ticked, on a live site with sign-up on.
   perform test_anon();
-  perform subscribe('Brand-A-Test.com', '  Pat@Example.com ', 'dog-training-guide', true);
+  perform subscribe('Brand-A-Test.com', '  Pat@Example.com ', 'dog-training-guide', true, 1);
   perform test_superuser();
   select * into s from subscribers;
   if s.email <> 'pat@example.com' then raise exception 'S-08: email not normalised'; end if;
@@ -131,7 +140,7 @@ begin
   perform test_superuser();
   update subscribers set consented_at = now() - interval '1 day';
   perform test_anon();
-  perform subscribe('brand-a-test.com', 'PAT@example.com', 'another-page', true);
+  perform subscribe('brand-a-test.com', 'PAT@example.com', 'another-page', true, 1);
   perform test_superuser();
   if (select count(*) from subscribers) <> 1 then raise exception 'S-08: a repeat sign-up created a second record'; end if;
   if (select consented_at from subscribers) > now() - interval '23 hours' or (select source_page from subscribers) <> 'dog-training-guide' then
@@ -140,7 +149,7 @@ begin
 
   -- The same address on another brand is that brand's own record.
   perform test_anon();
-  perform subscribe('brand-b-test.com', 'pat@example.com', null, true);
+  perform subscribe('brand-b-test.com', 'pat@example.com', null, true, 1);
   perform test_superuser();
   if (select count(*) from subscribers where brand_id = 'bbbbbbbb-1111-0000-0000-000000000001') <> 1 then
     raise exception 'S-08: sign-ups are per brand';
@@ -148,14 +157,14 @@ begin
 
   -- A filled honeypot: the same quiet success, nothing stored.
   perform test_anon();
-  perform subscribe('brand-a-test.com', 'bot@example.com', 'home', true, 'http://spam.example');
+  perform subscribe('brand-a-test.com', 'bot@example.com', 'home', true, 1, 'http://spam.example');
   perform test_superuser();
   if exists (select 1 from subscribers where email = 'bot@example.com') then raise exception 'S-08: the honeypot stored a sign-up'; end if;
 
   -- Turned off: refused again, existing records kept.
   update aff_sites set signup_enabled = false where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001';
   perform test_anon();
-  perform expect_refusal($q$select subscribe('brand-a-test.com', 'late@example.com', 'home', true)$q$, array['signup_unavailable']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'late@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
   perform test_superuser();
   if exists (select 1 from subscribers where email = 'late@example.com') then raise exception 'S-08: stored with sign-up off'; end if;
 end $$;
@@ -168,18 +177,66 @@ begin
   perform test_anon();
   if (select consent_text from public_signup('brand-a-test.com')) <> a1_wording() then raise exception 'S-08: the form shows other wording'; end if;
   if exists (select 1 from public_signup('brand-a2-test.com')) then raise exception 'S-08: a draft site offers the form'; end if;
-  perform subscribe('brand-a-test.com', 'first@example.com', 'home', true);
+  perform subscribe('brand-a-test.com', 'first@example.com', 'home', true, 1);
   perform test_superuser();
   insert into consent_texts (key, version, body) values ('email_signup', 2, 'Version two for {{brand}}.');
   perform test_anon();
   if (select consent_text from public_signup('brand-a-test.com')) <> 'Version two for Brand A1.' then raise exception 'S-08: the newest version is not shown'; end if;
-  perform subscribe('brand-a-test.com', 'second@example.com', 'home', true);
+  -- A form still showing version 1 is refused, and nothing is stored (owner's review change 4).
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'second@example.com', 'home', true, 1)$q$, array['signup_wording_changed']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'second@example.com', 'home', true, null)$q$, array['signup_wording_changed']);
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'second@example.com', 'home', true, 3)$q$, array['signup_wording_changed']);
+  perform test_superuser();
+  if exists (select 1 from subscribers where email = 'second@example.com') then raise exception 'S-08: stored with a changed wording'; end if;
+  perform test_anon();
+  perform subscribe('brand-a-test.com', 'second@example.com', 'home', true, 2);
   perform test_superuser();
   if (select consent_version from subscribers where email = 'first@example.com') <> 1
      or (select consent_text from subscribers where email = 'first@example.com') <> a1_wording() then
     raise exception 'S-08: an earlier record changed with the wording';
   end if;
-  if (select consent_version from subscribers where email = 'second@example.com') <> 2 then raise exception 'S-08: the new version not used'; end if;
+  if (select consent_version from subscribers where email = 'second@example.com') <> 2
+     or (select consent_text from subscribers where email = 'second@example.com') <> 'Version two for Brand A1.' then
+    raise exception 'S-08: the new version and its text not stored';
+  end if;
+  if (select consent_version from public_signup('brand-a-test.com')) <> 2 then raise exception 'S-08: the form should send version 2'; end if;
+end $$;
+rollback;
+
+-- ---------- No current Privacy Policy, no sign-up (owner's review change 3) ----------
+begin;
+do $$
+begin
+  perform test_anon();
+  if not exists (select 1 from public_signup('brand-a-test.com')) then raise exception 'setup: the form should show'; end if;
+
+  -- The template moves on: the brand's policy is no longer current.
+  perform test_superuser();
+  update compliance_templates set version = 3 where key = 'privacy';
+  perform test_anon();
+  if exists (select 1 from public_signup('brand-a-test.com')) then raise exception 'S-08: the form shows with an outdated policy'; end if;
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'pat@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
+  perform test_superuser();
+  if exists (select 1 from subscribers) then raise exception 'S-08: stored with an outdated policy'; end if;
+end $$;
+rollback;
+
+begin;
+-- The policy unpublished after sign-up was on. While the site is live this is
+-- refused (page_site_live, 0010); the test switches that rule off to reach the case.
+alter table site_pages disable trigger site_pages_keep_standard_live;
+update site_pages set status = 'draft' where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001' and template_key = 'privacy';
+do $$
+begin
+  perform test_anon();
+  if exists (select 1 from public_signup('brand-a-test.com')) then raise exception 'S-08: the form shows without a published policy'; end if;
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'pat@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
+  -- Another brand is unaffected.
+  perform subscribe('brand-b-test.com', 'pat@example.com', 'home', true, 1);
+  perform test_superuser();
+  if exists (select 1 from subscribers where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001') then
+    raise exception 'S-08: stored without a published policy';
+  end if;
 end $$;
 rollback;
 
@@ -193,12 +250,12 @@ begin
          'email_signup', 1, a1_wording(), 'brand-a-test.com'
   from generate_series(1, 30) g;
   perform test_anon();
-  perform expect_refusal($q$select subscribe('brand-a-test.com', 'one-more@example.com', 'home', true)$q$, array['signup_rate_limited']);
-  perform subscribe('brand-b-test.com', 'one-more@example.com', 'home', true);  -- another brand is not limited
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'one-more@example.com', 'home', true, 1)$q$, array['signup_rate_limited']);
+  perform subscribe('brand-b-test.com', 'one-more@example.com', 'home', true, 1);  -- another brand is not limited
   perform test_superuser();
   update subscribers set consented_at = now() - interval '2 minutes' where email like 'burst%';
   perform test_anon();
-  perform subscribe('brand-a-test.com', 'one-more@example.com', 'home', true);
+  perform subscribe('brand-a-test.com', 'one-more@example.com', 'home', true, 1);
   perform test_superuser();
   if (select count(*) from subscribers where email = 'one-more@example.com') <> 2 then raise exception 'S-08: rate limit did not lift'; end if;
 end $$;
@@ -297,14 +354,17 @@ do $$
 declare
   f text;
 begin
-  foreach f in array array['subscribe(text, text, text, boolean, text)', 'public_signup(text)'] loop
+  foreach f in array array['subscribe(text, text, text, boolean, integer, text)', 'public_signup(text)'] loop
     if not has_function_privilege('anon', f, 'execute') then raise exception 'S-08: visitors cannot call %', f; end if;
   end loop;
   foreach f in array array['set_signup(uuid, boolean)', 'subscriber_count(uuid)'] loop
     if has_function_privilege('anon', f, 'execute') then raise exception 'S-08: visitors can call %', f; end if;
     if not has_function_privilege('authenticated', f, 'execute') then raise exception 'S-08: the screens cannot call %', f; end if;
   end loop;
-  foreach f in array array['current_consent_text(text, text)', 'subscribers_audit_delete()'] loop
+  if to_regprocedure('public.subscribe(text, text, text, boolean, text)') is not null then
+    raise exception 'S-08: the old subscribe() without a consent version still exists';
+  end if;
+  foreach f in array array['current_consent_text(text, text)', 'subscribers_audit_delete()', 'signup_brand_for_host(text)'] loop
     if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
       raise exception 'S-08: % should be internal', f;
     end if;
@@ -316,7 +376,8 @@ begin
   if exists (
     select 1 from pg_proc
     where pronamespace = 'public'::regnamespace
-      and proname in ('current_consent_text', 'subscribers_audit_delete', 'subscriber_count', 'set_signup', 'subscribe', 'public_signup')
+      and proname in ('current_consent_text', 'subscribers_audit_delete', 'subscriber_count', 'set_signup', 'subscribe', 'public_signup',
+                      'signup_brand_for_host')
       and not coalesce(proconfig @> array['search_path=public, pg_temp'], false)
   ) then
     raise exception 'S-08: a function of 0011 does not set search_path = public, pg_temp';
