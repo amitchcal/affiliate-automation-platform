@@ -2,7 +2,7 @@
 
 This file gives Claude Code the context for this repository. Read it before making changes. It records what the product is, what has been decided, what is built, and how work is expected to be done.
 
-Last updated: 17 October 2026, after increment 5.1 (end-to-end tests built; increment 5 still awaiting the owner's walkthrough).
+Last updated: 17 October 2026, after increment 6 (batch 1: invitations and two-factor sign-in built and tested locally; nothing applied to the hosted project yet; increment 5 still awaiting the owner's walkthrough).
 
 ## What this product is
 
@@ -110,16 +110,21 @@ Do not put a product's price on a page. Link to the seller for the current price
 | 4 | ClickBank sales import (P-01 partial), combined metrics per offer (P-02), results dashboard per brand with date range (P-03) | Done; unit and database tests pass on PostgreSQL 16. `0004_results.sql` applied on the owner's Supabase project and all 8 `verify_results.sql` checks read ok. Live import path untested until the first real sale exists. |
 | 5 | Code split into core and the affiliate module; renamed Affiqube; AffiQube seed renamed AffilyVault and Famperia added; module entitlement by business type (T-07); every row's client matches its parents (0006) | Built. 90 unit tests and five database suites pass on PostgreSQL 16. 0005 applied on Supabase, all 15 `verify_modules.sql` rows ok. 0006 applied on Supabase, all 6 `verify_consistency.sql` rows ok. Application code committed; owner walkthrough of the screens pending. |
 | 5.1 | Local Supabase in Docker for tests; 25 Playwright end-to-end tests of the increment 5 walkthrough; `npm run test:all` runs every test. Fixed three screens (Offers, tracked links, page editor) whose embedded queries 0006 had made ambiguous | Built. `npm run test:all` passes: 104 unit tests, five database suites, 25 end-to-end tests. Fix not yet checked on the live project. |
+| 6 | Batch 1. Invitations (T-03, 0008): People screen, invite, Send again, withdraw, accept, decline, email links that need Continue. Two-factor sign-in (T-05, 0009): required for owner, operators, client admins, optional for viewers, enforced by the database with a live-session check; owner's reset; recovery SQL | Built and tested on the local stack; see the batch report in `docs/plans/increment-6-plan.md` and `docs/plans/increment-6-sabotage-report.md`. 0008 and 0009 not applied on Supabase; real email waits for the SMTP account and deployment (PL-13). |
 
 ### Layout
 
 ```
 supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql, 0004_results.sql,
-                       0005_modules_and_test_brands.sql, 0006_client_consistency.sql, 0007_privacy_template_wording.sql
+                       0005_modules_and_test_brands.sql, 0006_client_consistency.sql, 0007_privacy_template_wording.sql,
+                       0008_invitations.sql, 0009_two_factor.sql
 supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, consistency_rules.sql, module_rules.sql,
-                       privacy_template_rules.sql,
-                       local_bootstrap.sql, local_grants.sql
-supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency, verify_privacy
+                       privacy_template_rules.sql, invitation_rules.sql, two_factor_rules.sql,
+                       local_bootstrap.sql, local_grants.sql (every suite runs with 0009 applied, at aal2)
+supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency,
+                       verify_privacy, verify_invitations, verify_two_factor
+supabase/recovery/     remove_two_factor.sql: lost-authenticator fallback, for the Supabase SQL editor only
+supabase/email-templates/  invitation and sign-in email texts, pasted into the Supabase dashboard
 scripts/test-db.sh     runs the database tests on a local PostgreSQL (or in a postgres:16 Docker container)
 scripts/test-all.mjs   npm run test:all: type check, unit, database, end-to-end; stops at the first failure
 scripts/e2e*.mjs       local Supabase stack for tests (ports 54421-54427, never the hosted project), test build, Playwright
@@ -150,7 +155,7 @@ src/middleware.ts      routing by domain, and sessions
 ```bash
 npm install
 npm run test:all    # every test; needs Docker Desktop running. Run before handing work over
-npm test            # unit tests (104)
+npm test            # unit tests (165)
 npm run typecheck
 npm run build
 npm run dev
@@ -169,7 +174,7 @@ CLICKBANK_API_KEY=<ClickBank API key>  # temporary; per-brand credentials go in 
                                        # The connection row with secret_ref 'env:CLICKBANK_API_KEY' names the one client this key belongs to.
 ```
 
-The service role key is not used yet. When agents need it, it goes in server-only environment variables and is never exposed to the browser or committed.
+The service role key is used for one thing: sending invitation emails (`src/core/supabase/admin.ts`, server only), after the database has accepted the invitation. It is read from `SUPABASE_SERVICE_ROLE_KEY`, a server-only variable set in Vercel by the owner, never `NEXT_PUBLIC_`, never committed, never in chat. The test build is scanned to prove it is not in any built file.
 
 ### How the public site is served
 
@@ -192,7 +197,10 @@ The service role key is not used yet. When agents need it, it goes in server-onl
 - A brand without the affiliate module cannot have offers, offer figures, rules records, tracked links, or site pages added or changed; deletes are allowed (T-07).
 - Only the owner and operators can change a brand's business type; each change is audited.
 - Every row's `client_id` matches the client of the brand, offer, and link it points to (composite foreign keys, 0006). A sale keeps its client when its brand, offer, or link is deleted.
-- Changes to configuration, offers, rules, connections, and page publishing are written to `audit_log`, which cannot be updated or deleted.
+- People join a client only by accepting an invitation sent to their confirmed email address, for exactly the role it names. Only the owner invites operators; a client admin invites client admins and viewers into their own client only (0008).
+- Two-factor sign-in (0009): the access helpers require a live session token (with its `aal` and `session_id` claims) and, for the owner, operators, client admins, and any viewer with a verified authenticator, `aal2`. A password-only session reads only its own membership rows. Accepting or declining one's own invitation needs a live session, not the second step.
+- Only the owner can reset another person's two-factor sign-in, never their own; the reset deletes their authenticators, sessions, and refresh tokens and is audited in the same transaction.
+- Changes to configuration, offers, rules, connections, page publishing, invitations, and two-factor sign-in are written to `audit_log`, which cannot be updated or deleted.
 
 ## Offer scoring
 
@@ -225,11 +233,11 @@ The story bank of 13 October 2026 in `docs/user-stories.md` adds the dropshippin
 | --- | --- | --- | --- |
 | T-01 | Clients with one or more brands, kept separate | Must | Done |
 | T-02 | Role-based access enforced in the database | Must | Done |
-| T-03 | Client admin invites own users | Should | Not started |
+| T-03 | Client admin invites own users | Should | Built (increment 6); tested locally. Live use waits for 0008 on Supabase, the SMTP account, and deployment (PL-13) |
 | T-04 | Owner master access with client switcher | Must | Done |
-| T-05 | Two-factor sign-in for admin roles | Should | Not started |
+| T-05 | Two-factor sign-in for admin roles | Should | Built (increment 6); enforced in the database; tested locally. 0009 not yet applied on Supabase |
 | T-06 | Audit log of publishing and spending actions | Must | Done |
-| T-07 | Business type switches a brand's modules on | Must | Partial: built in increment 5; walkthrough pending; the wizard re-run waits for W-02 |
+| T-07 | Business type switches a brand's modules on | Must | Done: built in increments 5 and 5.1; walkthrough pending; the wizard re-run arrives with W-02 (batch 3) |
 | C-01 | Brand profile | Must | Partial: business details and headline; no colours, logo, voice |
 | C-02 | Budget caps per brand and campaign | Must | Not started (Slice 2) |
 | C-03 | Rules record per offer | Must | Done in the database; no screen for rule text or banned claims |
@@ -296,6 +304,19 @@ The story bank of 13 October 2026 in `docs/user-stories.md` adds the dropshippin
 ## What to build next
 
 Follow "Build order" in the architecture section and the release plan in `docs/user-stories.md`. The earlier affiliate-only order (drafting agent as increment 5, management screens as increment 6) is replaced: the drafting agent and offer rules screen are now release R3, and Meta campaigns are R8.
+
+## Working in batches
+
+Decided 17 October 2026. Work is delivered in batches listed in `docs/plans/batch-plan.md`, each with its stories and gate. Batch 1 is increment 6 (T-03, T-05). These rules apply to every batch:
+
+- **One plan per batch:** `docs/plans/batch-N-plan.md`, with the stories and acceptance criteria, data changes with reserved migration numbers, security and access rules, screens and wording, tests including sabotage cases, build steps in order, the owner's parallel track (what only he can do), and open questions. Stop after the plan and wait for approval.
+- **After approval, build every step in one run.** Stop early only if `npm run test:all` fails and cannot be fixed, or a decision is the owner's.
+- **Planned pauses** only before building on a migration that touches access rules, money, or compliance text. Print the file paths and wait for review.
+- **Prove protections can fail.** Every rule that protects access, money, compliance, or data isolation is shown to fail when removed, before handover. Pure display tests need no sabotage run.
+- **Nothing applied, committed, or pushed** to the hosted Supabase project or the repository without the owner's say-so.
+- **Standing rules still apply:** no keys or passwords in the repository or in chat; tests use only the local stack on ports 54421 to 54427; do not touch the interior-ai project; work in this repository folder.
+- **One report at the end of the batch,** in this order: test counts; git status; the SQL files to run on Supabase, in order, with each verify query; manual checks for the owner; decisions needed; risks. Update the stories' statuses in `docs/user-stories.md`.
+- **Do not start the next batch until told.** If asked, write the next batch's plan in `docs/plans` only (no code, no migrations), with migration numbers that do not clash with the batch being built.
 
 ## How to work in this repository
 

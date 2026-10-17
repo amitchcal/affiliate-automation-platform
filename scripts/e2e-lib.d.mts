@@ -2,6 +2,8 @@
 export interface RunUser {
   email: string;
   password: string;
+  /** The authenticator's key, for the roles that require two-factor sign-in (T-05). */
+  totpKey?: string;
 }
 export interface Run {
   supabaseUrl: string;

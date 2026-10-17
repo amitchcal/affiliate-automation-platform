@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { mustSetUpTwoFactor, SETUP_REQUIRED } from "@/core/auth-landing";
 import { InvitableRole, refusalMessage, ROLE_LABELS } from "@/core/invitations";
 import { createClient } from "@/core/supabase/server";
 
@@ -20,6 +21,8 @@ export async function acceptInvitation(formData: FormData) {
   if (error) back("error", refusalMessage(error.message));
 
   const accepted = (data as { client_id: string; client_name: string; role: InvitableRole }[])[0];
+  // A new operator or client admin turns two-factor sign-in on first (T05-4).
+  if (await mustSetUpTwoFactor(supabase)) redirect(SETUP_REQUIRED);
   redirect(
     `/clients/${accepted.client_id}?notice=${encodeURIComponent(
       `You now have access to ${accepted.client_name} as ${ROLE_LABELS[accepted.role]}.`,

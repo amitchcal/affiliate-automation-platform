@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { DB_CONTAINER, docker, readRun, type Run } from "../../scripts/e2e-lib.mjs";
+import { totp } from "./totp";
 
 /** Fixed ids from migrations 0002 and 0005 and from e2e/seed.sql. */
 export const IDS = {
@@ -20,13 +21,22 @@ export function run(): Run {
   return cached;
 }
 
-/** Signs in through the sign-in screen and waits for the clients list. */
+/**
+ * Signs in through the sign-in screen, with the code from the person's
+ * authenticator when two-factor sign-in is on for them (T-05), and waits for
+ * the clients list.
+ */
 export async function signIn(page: Page, role: Role) {
   const user = run().users[role];
   await page.goto("/login");
   await page.getByLabel("Email", { exact: true }).fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  if (user.totpKey) {
+    await expect(page).toHaveURL(/\/login\/two-factor$/);
+    await page.getByLabel("6-digit code").fill(totp(user.totpKey));
+    await page.getByRole("button", { name: "Continue" }).click();
+  }
   await expect(page).toHaveURL(/\/clients$/);
 }
 
@@ -59,11 +69,8 @@ export const AFFILIATE_TABS = ["Overview", "Offers", "Site and links", "Results"
  * screen shows (the audit log) and for requests that skip the screens.
  */
 export async function dbAs(role: Role): Promise<SupabaseClient> {
-  const { supabaseUrl, anonKey, users } = run();
-  const client = createClient(supabaseUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { error } = await client.auth.signInWithPassword(users[role]);
-  if (error) throw new Error(`Test sign-in failed for ${role}: ${error.message}`);
-  return client;
+  const { email, password, totpKey } = run().users[role];
+  return dbAsAccount(email, password, totpKey);
 }
 
 /**
@@ -100,12 +107,23 @@ export async function createAccount(email: string, password: string): Promise<st
   return ((await response.json()) as { id: string }).id;
 }
 
-/** A Supabase session for any account, by email and password, through the local API. */
-export async function dbAsAccount(email: string, password: string): Promise<SupabaseClient> {
+/**
+ * A Supabase session for any account, by email and password, through the local
+ * API. With an authenticator key it also does the second step (aal2); without
+ * one it is a password-only session (aal1).
+ */
+export async function dbAsAccount(email: string, password: string, totpKey?: string): Promise<SupabaseClient> {
   const { supabaseUrl, anonKey } = run();
   const client = createClient(supabaseUrl, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`Test sign-in failed for ${email}: ${error.message}`);
+  if (totpKey) {
+    const { data: factors } = await client.auth.mfa.listFactors();
+    const factor = factors?.totp.find((candidate) => candidate.status === "verified");
+    if (!factor) throw new Error(`${email} has no verified authenticator.`);
+    const { error: codeError } = await client.auth.mfa.challengeAndVerify({ factorId: factor.id, code: totp(totpKey) });
+    if (codeError) throw new Error(`Test second step failed for ${email}: ${codeError.message}`);
+  }
   return client;
 }
 

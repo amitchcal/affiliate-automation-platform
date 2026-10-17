@@ -23,3 +23,32 @@ grant usage on schema auth to authenticated, anon;
 -- Stand-in for Supabase's auth.users: the columns the migrations and tests read.
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text unique);
 alter table auth.users add column if not exists email_confirmed_at timestamptz;
+-- Stand-ins for Supabase's sign-in sessions and authenticators (T-05, 0009).
+create table if not exists auth.sessions (id uuid primary key, user_id uuid not null, aal text);
+create table if not exists auth.mfa_factors (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  factor_type text not null default 'totp',
+  status text not null
+);
+-- Stand-in for Supabase's refresh tokens (user_id is text there too).
+create table if not exists auth.refresh_tokens (
+  id bigserial primary key,
+  token text,
+  user_id varchar(255),
+  session_id uuid,
+  revoked boolean default false
+);
+
+-- A live aal2 session for a test user, so the suites written before 0009 keep
+-- testing what they test, under two-factor enforcement. Returns its id.
+create or replace function auth.test_session(uid text) returns uuid
+language plpgsql security definer as $$
+declare
+  sid uuid := md5('test-session-' || uid)::uuid;
+begin
+  insert into auth.sessions (id, user_id, aal) values (sid, uid::uuid, 'aal2') on conflict (id) do nothing;
+  return sid;
+end;
+$$;
+grant execute on function auth.test_session(text) to authenticated;

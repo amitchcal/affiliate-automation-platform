@@ -2,8 +2,10 @@
 //
 //   1. starts the local Supabase stack in Docker (config in e2e/supabase, no migrations);
 //   2. resets its database to empty, so every run starts from the same state;
-//   3. creates the test users through the local sign-in service, each with a new random password;
-//   4. applies supabase/migrations 0001 to 0006 in order (0002 needs the owner's account first);
+//   3. creates the test users through the local sign-in service, each with a new random password,
+//      and turns two-factor sign-in on for the roles that require it (T-05), each with a new key;
+//   4. applies supabase/migrations in order (0002 needs the owner's account first, and 0009
+//      stops unless the owner has an authenticator: its lockout guard runs for real here);
 //   5. loads e2e/seed.sql;
 //   6. writes the address, the local anon key and the users to e2e/.run/run.json, which git ignores.
 //
@@ -30,6 +32,7 @@ import {
   RUN_FILE,
   tool,
 } from "./e2e-lib.mjs";
+import { totp } from "./totp.mjs";
 
 export const TEST_USERS = {
   owner: "amit.chakraborty@affilyvault.com", // the address 0002 makes the owner
@@ -37,6 +40,10 @@ export const TEST_USERS = {
   clientViewer: "e2e.client.viewer@example.com",
   otherAdmin: "e2e.other.admin@example.com",
 };
+
+// The roles that require two-factor sign-in (decided 17 October 2026, Q1). The
+// viewer has none, as a viewer who has not turned it on.
+const TWO_FACTOR_USERS = ["owner", "clientAdmin", "otherAdmin"];
 
 const step = (text) => console.log(`\n== ${text}`);
 
@@ -85,6 +92,28 @@ function psqlFile(file) {
     { input: sql },
   );
   if (result.status !== 0) fail(`${file} did not apply:\n${result.stderr || result.stdout}`);
+}
+
+/**
+ * Turns two-factor sign-in on for a test user through the local sign-in
+ * service, as the setup screen does, and returns the authenticator's key (kept
+ * in e2e/.run/run.json, ignored by git, like the passwords).
+ */
+async function enrollAuthenticator(url, anonKey, email, password) {
+  const call = async (pathname, token, body) => {
+    const response = await fetch(`${url}/auth/v1/${pathname}`, {
+      method: "POST",
+      headers: { apikey: anonKey, Authorization: `Bearer ${token ?? anonKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    if (!response.ok) fail(`two-factor setup for ${email} failed at ${pathname}: ${response.status} ${await response.text()}`);
+    return response.json();
+  };
+  const { access_token: token } = await call("token?grant_type=password", null, { email, password });
+  const factor = await call("factors", token, { factor_type: "totp", friendly_name: "Test authenticator" });
+  const challenge = await call(`factors/${factor.id}/challenge`, token);
+  await call(`factors/${factor.id}/verify`, token, { challenge_id: challenge.id, code: totp(factor.totp.secret) });
+  return factor.totp.secret;
 }
 
 async function createUser(url, serviceKey, email, password) {
@@ -142,7 +171,11 @@ export async function prepareDatabase() {
     const password = randomBytes(18).toString("base64url");
     await createUser(LOCAL_SUPABASE_URL, serviceKey, email, password);
     users[role] = { email, password };
+    if (TWO_FACTOR_USERS.includes(role)) {
+      users[role].totpKey = await enrollAuthenticator(LOCAL_SUPABASE_URL, anonKey, email, password);
+    }
   }
+  console.log(`   two-factor sign-in on for: ${TWO_FACTOR_USERS.join(", ")}`);
 
   step("Applying the migrations in order");
   const migrations = readdirSync(path.join(ROOT, "supabase", "migrations")).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();

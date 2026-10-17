@@ -39,6 +39,9 @@ insert into memberships (user_id, client_id, role) values
 create or replace function test_login(uid text) returns void language plpgsql as $$
 begin
   perform set_config('request.jwt.claim.sub', uid, true);
+  -- A live session that has done the second step (aal2), as after 0009 (T-05).
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', uid, 'aal', 'aal2', 'session_id', auth.test_session(uid))::text, true);
   execute 'set local role authenticated';
 end;
 $$;

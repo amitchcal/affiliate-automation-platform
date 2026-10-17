@@ -1,8 +1,45 @@
 # Affiqube
 
-One platform for running affiliate marketing and dropshipping brands: a shared core, plus one module per kind of business. Increments 1 to 4 built the data model with access rules, the offer scoring engine, the application, the public brand site with compliant pages and tracked links, and results from ClickBank sales. Increment 5 split the code into core and modules and switched each brand's modules on by its business type.
+One platform for running affiliate marketing and dropshipping brands: a shared core, plus one module per kind of business. Increments 1 to 4 built the data model with access rules, the offer scoring engine, the application, the public brand site with compliant pages and tracked links, and results from ClickBank sales. Increment 5 split the code into core and modules and switched each brand's modules on by its business type. Increment 6 added invitations and two-factor sign-in.
 
 Story IDs refer to the story bank in `docs/user-stories.md`. The architecture rules are in `CLAUDE.md`. A plain-language explanation of the whole product is in `docs/how-it-works.md`.
+
+## Increment 6: invitations (T-03) and two-factor sign-in (T-05)
+
+Plan and decisions: `docs/plans/increment-6-plan.md`. Sabotage report: `docs/plans/increment-6-sabotage-report.md`. This completes Epic 1 (tenancy and access) and is batch 1 of `docs/plans/batch-plan.md`.
+
+| File | What it does | Stories |
+| --- | --- | --- |
+| `supabase/migrations/0008_invitations.sql` | Invitations table; create, send again, withdraw, accept, decline; who may invite whom; client admins read their client's members; audited | T-03 |
+| `supabase/migrations/0009_two_factor.sql` | Two-factor sign-in enforced in the database: the access helpers require a live session token and, for the owner, operators, client admins and any viewer who turned it on, the second step (aal2). The owner's reset of another person's two-factor sign-in. Audit entries. One transaction, with a lockout guard | T-05 |
+| `supabase/recovery/remove_two_factor.sql` | Fallback for a lost authenticator, run in the Supabase SQL editor: removes the account's authenticators, sessions and refresh tokens, audited | T-05 |
+| `src/core/screens/PeoplePage.tsx`, `people-actions.ts` | People screen: members, invitations, invite form, Send again, Withdraw; the owner's Reset two-factor | T-03, T-05 |
+| `src/core/screens/InvitationsPage.tsx`, `ConfirmLinkPage.tsx`, `PasswordPage.tsx` | Accept or decline; email links that do nothing until Continue is pressed; choose a password | T-03 |
+| `src/core/screens/SecurityPage.tsx`, `src/core/components/TwoFactorSettings.tsx`, `TwoFactorCodeForm.tsx` | Turn two-factor sign-in on, add a second authenticator, remove one (never the last for a required role); the code step at sign-in | T-05 |
+| `src/core/auth-landing.ts`, `src/middleware.ts` | After sign-in: the code step, then invitations, then the setup screen for a required role without two-factor | T-03, T-05 |
+| `src/core/supabase/admin.ts` | Server-only use of the service role key, for sending invitation emails only, after the database has agreed | T-03 |
+| `supabase/tests/invitation_rules.sql`, `two_factor_rules.sql` | Database tests; every suite now runs with 0009 applied, at aal2 | T-03, T-05 |
+| `supabase/verify_invitations.sql`, `verify_two_factor.sql` | Checks to run in the Supabase SQL editor | T-03, T-05 |
+| `e2e/invitations.spec.ts`, `e2e/two-factor.spec.ts` | End-to-end tests; the test users of required roles have authenticators and `signIn()` enters the code | T-03, T-05 |
+
+### Apply the database changes, in this order
+
+Nothing has been applied to the hosted project yet.
+
+1. Deploy the application with the new screens.
+2. Run `0008_invitations.sql`, then `verify_invitations.sql`: every row should read ok.
+3. Turn on two-factor sign-in for the owner account in the application (Two-factor sign-in, at the top of every page), on **two** devices.
+4. Run the whole of `verify_two_factor.sql`. Only the row "the owner has a verified authenticator" must read ok. If "operators and client admins without an authenticator" is not "none", tell those people first: after step 5 they see nothing until they turn it on.
+5. Run `0009_two_factor.sql`. It stops and changes nothing if the owner has no authenticator.
+6. Run `verify_two_factor.sql` again: every row should read ok.
+
+### What was verified
+
+| Check | Result |
+| --- | --- |
+| `npm run test:all` on the development machine (Windows, Docker Desktop) | See the batch report in the plan; counts below |
+| The protections fail when removed | Sabotage report, `docs/plans/increment-6-sabotage-report.md` |
+| Real email, a real phone app, the hosted project's settings | Not verified from here: the owner's manual checks after deployment |
 
 ## Privacy Policy wording (0007)
 
@@ -276,6 +313,8 @@ To apply the schema to Supabase, run `supabase/migrations/0001_core.sql` in the 
 - Every client-owned row carries `client_id`.
 - A user's rights come from the `memberships` table. The owner has one row with no client, which gives access to all clients.
 - Four functions decide access: `is_owner()`, `has_client_access()`, `can_manage()` (owner and operators), and `can_approve()` (those plus the client's admin).
+- Since 0009, each of them also requires a live sign-in session and, for the owner, operators, client admins, and any viewer who has turned it on, the second sign-in step. A password alone then reads nothing but the person's own membership rows.
+- People join a client only by accepting an invitation sent to their confirmed email address. Only the owner invites operators; a client admin invites client admins and viewers into their own client.
 - Connections to networks and ad accounts are visible only to the owner and operators. The table stores a reference to each secret, never the secret.
 - An offer can be approved only after its rules record is approved. A tracked link can be created only for an approved offer.
 - Changes to scoring configuration, approval settings, offers, rules, and connections are written to `audit_log`, which has no update or delete policy.
@@ -294,7 +333,11 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 | --- | --- | --- |
 | T-01 | Every record carries a client ID | Met by the schema |
 | T-02 | A client login cannot read another client's rows, proven by a test | Met; tested |
+| T-03 | Invited users receive a role limited to that client | Met; tested at the database and end to end on the local stack. Real email needs the SMTP account and deployment (PL-13). |
+| T-03 | A client admin cannot invite operators, or into another client | Met; tested |
 | T-04 | The owner can open any client's brands | Met; tested |
+| T-05 | Owner and client admin logins require a second factor (also operators; optional for viewers) | Met; enforced by the database (0009); tested at the database and end to end on the local stack. Not yet applied to the hosted project. |
+| T-05 | A lost authenticator can be reset by the owner, or removed with the recovery SQL | Met; both tested on the local stack only |
 | T-06 | Each entry records actor, time, action, before and after | Met; tested |
 | T-01, T-02 | A row cannot name one client while pointing at another client's brand, offer, or link | Met; tested at the database (0006) |
 | T-07 | Business type is Affiliate marketing, Dropshipping, or Both, and enables the matching modules | Met; tested |

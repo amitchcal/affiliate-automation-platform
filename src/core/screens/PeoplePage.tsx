@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { StatusMessages } from "@/core/components/StatusMessages";
 import { AppRole, formatDate, InvitableRole, ROLE_DESCRIPTIONS, ROLE_LABELS, rolesOfferedTo } from "@/core/invitations";
 import { createClient } from "@/core/supabase/server";
-import { inviteToClient, sendInvitationAgain, withdrawInvitation } from "./people-actions";
+import { inviteToClient, resetTwoFactor, sendInvitationAgain, withdrawInvitation } from "./people-actions";
 
 interface Member {
   user_id: string;
@@ -106,10 +106,22 @@ export default async function PeoplePage({
             {memberList.map((member) => (
               <li key={member.user_id}>
                 <div className="split">
-                  <strong>{member.email}</strong>
-                  <span className="hint">
-                    {ROLE_LABELS[member.role]}, joined {formatDate(member.joined_at)}
-                  </span>
+                  <div>
+                    <strong>{member.email}</strong>
+                    <div className="hint">
+                      {ROLE_LABELS[member.role]}, joined {formatDate(member.joined_at)}
+                    </div>
+                  </div>
+                  {myRole === "owner" && member.user_id !== me ? (
+                    <form action={resetTwoFactor}>
+                      <input type="hidden" name="client_id" value={client.id} />
+                      <input type="hidden" name="user_id" value={member.user_id} />
+                      <input type="hidden" name="email" value={member.email} />
+                      <button type="submit" className="quiet">
+                        Reset two-factor
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               </li>
             ))}

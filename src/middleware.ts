@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { mayOpenBeforeSetup } from "@/core/two-factor";
 
 /**
  * Two jobs:
@@ -76,16 +77,32 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLogin = pathname.startsWith("/login");
-  if (!user && !isLogin) {
+  // Redirects apply to page loads only. A form's server action (a POST) is never
+  // redirected halfway; the database still refuses what it must.
+  if (request.method !== "GET") return response;
+
+  const goTo = (path: string, search = "") => {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = path;
+    url.search = search;
     return NextResponse.redirect(url);
-  }
-  if (user && isLogin) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/clients";
-    return NextResponse.redirect(url);
+  };
+  const isSignIn = pathname === "/login";
+  const isCodeStep = pathname === "/login/two-factor";
+
+  if (!user) return isSignIn ? response : goTo("/login");
+
+  // T-05: two-factor sign-in is on but only the password has been given.
+  const { data: level } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  const needsCode = level?.nextLevel === "aal2" && level.currentLevel !== "aal2";
+  if (needsCode) return isCodeStep ? response : goTo("/login/two-factor");
+  if (isSignIn || isCodeStep) return goTo("/clients");
+
+  // T05-4: a role that requires two-factor sign-in, with no authenticator yet,
+  // is held on the setup screen. Asked only of password-only sessions.
+  if (level?.currentLevel === "aal1" && !mayOpenBeforeSetup(pathname)) {
+    const { data: required } = await supabase.rpc("mfa_required");
+    if (required === true) return goTo("/account/security", "?required=1");
   }
   return response;
 }

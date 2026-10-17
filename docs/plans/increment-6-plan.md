@@ -1,6 +1,6 @@
 # Increment 6 plan: invitations (T-03) and two-factor sign-in (T-05)
 
-Prepared 17 October 2026. Status: **answers Q1–Q8 approved by the owner on 17 October 2026 and his eight changes applied. Step 0 (local spike) done on 17 October 2026; findings and design changes D1–D7 recorded in section 2 and approved, with Q12 and Q13 answered yes. Additions (a) and (b) approved. Steps 1–3 approved for building; Q9–Q11 open.** No migration has been run, nothing is committed.
+Prepared 17 October 2026. Status: **built (steps 0–7) on 17 October 2026; see section 10. Nothing applied to the hosted project.** Earlier status: **answers Q1–Q8 approved by the owner on 17 October 2026 and his eight changes applied. Step 0 (local spike) done on 17 October 2026; findings and design changes D1–D7 recorded in section 2 and approved, with Q12 and Q13 answered yes. Additions (a) and (b) approved. Steps 1–3 approved for building; Q9–Q11 open.** No migration has been run, nothing is committed.
 
 This increment completes Epic 1 (tenancy and access). Migration numbers start at 0008; 0007 is the Privacy Policy wording fix.
 
@@ -692,12 +692,34 @@ The test runs the repository file itself, with only the address substituted, aga
 | 1 | **Built 17 October 2026.** 0008, `invitation_rules.sql`, `verify_invitations.sql`; test stand-in `auth.jwt()` | `npm run test:db` |
 | 2 | **Built 17 October 2026.** Server-only admin client; guard and build-scan additions; mail catcher (`[local_smtp]`) on in `e2e/supabase/config.toml`, TOTP on, public sign-up off (`[auth] enable_signup = false`, **email provider left on**), email confirmation on, minimum password length 12; unit tests | `npm test`, `npm run test:db` |
 | 3 | **Built 17 October 2026.** People screen: invite, Send again, withdraw. `/auth/confirm`, password screen, Invitations screen with Accept and Decline. "Email me a sign-in link" on the sign-in page. Email templates. `invitations.spec.ts` | **`npm run test:all`** |
-| 4 | Two-factor setup, add and remove, the code step at sign-in (no enforcement yet); TOTP helper; `two-factor.spec.ts` parts 1, 2, 5 | **`npm run test:all`** |
-| 5 | 0009 enforcement, `two_factor_rules.sql`, `verify_two_factor.sql`; existing suites and `signIn()` use the second step; remaining two-factor e2e parts | **`npm run test:all`** |
-| 6 | Owner reset of two-factor; `supabase/recovery/remove_two_factor.sql`; recovery tests (e2e test 8); audit entries | **`npm run test:all`** |
-| 7 | Sabotage runs S1–S32 with a report; README, CLAUDE.md, `how-it-works.md`, story status | **`npm run test:all`** before handover |
+| 4 | **Built 17 October 2026.** Two-factor setup, add and remove, the code step at sign-in (no enforcement yet); TOTP helper; `two-factor.spec.ts` parts 1, 2, 5 | **`npm run test:all`** |
+| 5 | **Built 17 October 2026**, after the owner approved 0009 with four changes (section 10). 0009 enforcement, `two_factor_rules.sql`, `verify_two_factor.sql`; every database suite runs with 0009 applied, at aal2; the end-to-end stack applies 0009 (its lockout guard runs for real) and `signIn()` enters the code; two-factor e2e parts 3, 4, 7, (a), (b) | **`npm run test:all`** |
+| 6 | **Built 17 October 2026.** Owner reset of two-factor (`reset_two_factor`, in 0009); `supabase/recovery/remove_two_factor.sql`; recovery tests (database test of the file itself; e2e test 8); audit entries | **`npm run test:all`** |
+| 7 | **Built 17 October 2026.** Sabotage runs S1–S34 with a report (`increment-6-sabotage-report.md`); README, CLAUDE.md, `how-it-works.md`, story status | **`npm run test:all`** before handover |
 
 Handover to Amit happens only after step 7, with:
 - the hosted settings to check (section 7);
 - the rollout order (section 3);
 - the manual checks the tests cannot make: real phone, real email, hosted settings.
+
+---
+
+## 10. Build notes, steps 5 to 7 (17 October 2026)
+
+### The owner's four changes to 0009, as built
+
+1. **Positive tests for 0008 under 0009** (`two_factor_rules.sql`): a client admin at aal2 creates, sends again and withdraws; at aal1 Send again and Withdraw are refused and change nothing (no row, no audit entry); an invitee with no authenticator lists, accepts and declines on a live aal1 session, and on a deleted session can do none of these; a new operator reads no client data until aal2.
+2. **Missing claims.** A token with no `session_id` claim, and one with no `aal` claim (or an unknown value), read nothing, for the owner and for a viewer without an authenticator. To make the viewer case hold, **`session_active()` now also requires the `aal` claim to be `aal1` or `aal2`.** Before, a viewer's token without `aal` would have passed (`mfa_ok()` lets a viewer with no authenticator through at any level). Sabotage S34 removes this check.
+3. **One transaction.** 0009 is wrapped in `begin; … commit;`, with the lockout guard as the first statement. `scripts/test-db.sh` checks that `access_ok()` does not exist after the guard stops, with **`to_regprocedure('public.access_ok()')`**, not `to_regproc('access_ok()')`: on PostgreSQL 16, `to_regproc` reads null for any name with brackets, even `now()`, so it could never fail (checked in a `postgres:16` container).
+4. **`verify_two_factor.sql` header.** Run the whole file before applying; only the owner row must read ok; tell the operators and client admins it lists before applying. The file now runs without errors before 0009 exists (it uses `to_regprocedure`); checked before and after on a scratch database.
+
+### Other changes made while building
+
+- **`reset_two_factor(user_id)` and `record_security_event(action)` are in 0009**, as section 3 planned. Refusals: `reset_not_allowed`, `reset_own_two_factor`, `reset_no_such_user`, `security_event_not_allowed`, `security_event_unknown`, each with a message in `src/core/two-factor.ts`.
+- **The setup hold for a required role without an authenticator** (T05-4) is in the middleware (page loads) **and** in `landingAfterSignIn()` and Accept (server actions render their next page inside the POST, where the middleware does not redirect). Pages open before setup: `/account/security`, `/account/password`, `/invitations`. The database stays the barrier.
+- **The code step tries every verified authenticator**, so a code from a second phone works.
+- **The existing database suites run with 0009 applied**: their `test_login` sets a live aal2 session (`auth.test_session()` in `local_bootstrap.sql`, a test stand-in only).
+- **The end-to-end test users of required roles** (owner, client admin, other admin) get an authenticator at preparation, through the local API, before the migrations run, so 0009's guard passes for real. Keys stay in `e2e/.run/run.json` (ignored by git). The local stack accepts the same code more than once within its 30 seconds, so `signIn()` uses the current code.
+- **Own membership rows stay readable with a stale token** (signature still valid, session deleted): `memberships_read` asks only `user_id = auth.uid()`, by design (T05-11). No client data is readable. The e2e recovery test records this.
+- **Own two-factor changes are audited by the screen**, after Supabase confirms them (`record_security_event`). Someone who calls Supabase's API directly, skipping the screens, changes their own authenticators without an audit entry. Resets are audited by the database in the same transaction.
+

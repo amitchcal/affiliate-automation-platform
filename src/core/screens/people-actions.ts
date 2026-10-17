@@ -11,6 +11,7 @@ import {
 } from "@/core/invitations";
 import { sendInvitationEmail } from "@/core/supabase/admin";
 import { createClient } from "@/core/supabase/server";
+import { resetDoneMessage, resetRefusalMessage } from "@/core/two-factor";
 
 const peoplePath = (clientId: string) => `/clients/${clientId}/people`;
 
@@ -67,6 +68,23 @@ export async function sendInvitationAgain(formData: FormData) {
   revalidatePath(peoplePath(clientId));
   if (!(await sendInvitationEmail(sent.email))) back(clientId, "error", EMAIL_NOT_SENT);
   back(clientId, "notice", `Invitation sent again to ${sent.email}.`);
+}
+
+/**
+ * T05-8: the owner resets a person's two-factor sign-in (a lost phone). The
+ * database checks it is the owner and not their own account, removes the
+ * person's authenticators, sessions and refresh tokens, and audits it.
+ */
+export async function resetTwoFactor(formData: FormData) {
+  const clientId = String(formData.get("client_id") ?? "");
+  const userId = String(formData.get("user_id") ?? "");
+  const email = String(formData.get("email") ?? "");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reset_two_factor", { p_user: userId });
+  if (error) back(clientId, "error", resetRefusalMessage(error.message));
+
+  revalidatePath(peoplePath(clientId));
+  back(clientId, "notice", resetDoneMessage(email));
 }
 
 /** T-03: withdraw an open invitation. */

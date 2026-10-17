@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </Link>
         <div className="who">
           <span>{user.email}</span>
+          <Link href="/account/security">Two-factor sign-in</Link>
           <form action={signOut}>
             <button type="submit" className="quiet">
               Sign out

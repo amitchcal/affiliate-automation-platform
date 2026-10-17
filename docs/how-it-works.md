@@ -1,7 +1,7 @@
 # How it works
 
 A plain-language overview for someone who needs to understand the product without reading the code.
-Updated after increment 5, October 2026.
+Updated after increment 6, October 2026.
 
 ---
 
@@ -51,6 +51,53 @@ offer, or link it belongs to. One client's data can never be attached to another
 The first client has two test brands. **AffilyVault** (affilyvault.com) does affiliate marketing.
 **Famperia** (famperia.com) is a dropshipping store selling home decoration. `affiqube.com` is the
 platform's own address, not a brand.
+
+---
+
+## People and sign-in
+
+### Roles
+
+Everyone who signs in has a role for each client they work on:
+
+- **Owner**: Vividha Marketing. Sees and runs every client.
+- **Operator**: works for Vividha Marketing on a client. Can change settings, approve, and publish.
+- **Client admin**: can see everything for their client, approve offers, and invite people.
+- **Viewer**: can see results and settings but cannot change anything.
+
+### Invitations
+
+Nobody can sign up on their own. A person joins a client only when invited:
+
+1. The owner, or a client admin, opens the client's **People** screen and invites an email address
+   with a role. Only the owner can invite operators. A client admin can invite client admins and
+   viewers, and only into their own client.
+2. The person receives an email with a link. Opening the link does nothing until they press
+   **Continue**, so an email scanner that opens links cannot use it up. A new person then chooses
+   a password.
+3. They see the invitation and choose **Accept** or **Decline**. Accepting gives exactly the role
+   the invitation named, for that client only. An invitation works once and expires after 7 days.
+
+Every invitation, resend, withdrawal, acceptance, and decline is written to the audit record.
+
+### Two-factor sign-in
+
+Two-factor sign-in means a password is not enough: the person also types a 6-digit code from an
+authenticator app on their phone. The code changes every 30 seconds.
+
+- It is **required** for the owner, operators, and client admins, because they can approve,
+  publish, or invite. Someone in one of these roles who has not turned it on is taken to the setup
+  screen and can do nothing else until it is on.
+- It is **optional** for viewers. A viewer who turns it on is then held to it, like everyone else.
+- The rule is enforced by the database, not only by the screens. A session that has used only the
+  password reads no client data and changes nothing, even if it skips the screens.
+- Signing out, or a reset, cuts access at once, even for a session still open in another browser.
+- Each person should add a second authenticator (for example a second phone). The last
+  authenticator of a required role cannot be removed.
+- If someone loses their phone, the owner presses **Reset two-factor** next to them on the People
+  screen. They are signed out everywhere and set it up again at their next sign-in. If the owner
+  loses their own, a recovery file run in the Supabase SQL editor does the same for the owner's
+  account. Both are written to the audit record.
 
 ---
 

@@ -5,7 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { fail, ROOT } from "./e2e-lib.mjs";
 
-const SUITES = 7;
+const SUITES = 9; // eight suites and the recovery SQL test
 
 function hasPsql() {
   return spawnSync("psql", ["--version"], { stdio: "ignore" }).status === 0;
