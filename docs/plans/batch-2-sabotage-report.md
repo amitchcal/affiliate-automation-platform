@@ -67,3 +67,30 @@ Run on 17 October 2026 on the development machine (Windows, Docker Desktop), aga
 
 - **The per-visitor rate limit** at the application or edge is not built. It is a gate before any real sign-up is switched on (`docs/plans/batch-plan.md`). The database limit is per brand: 30 a minute.
 - **Real DNS, Vercel's domain setup, and TLS** are not exercised. The tests use the fake resolver and Chromium's host mapping.
+
+## Added cases, owner's request (17 October 2026)
+
+Run against `0ac7fe9`, in the same way as the cases above:
+- each case a separate run, in the foreground;
+- leftover servers and browsers stopped first;
+- restored with `git show HEAD:<file> > <file>`, with its hash and line endings checked against a fresh snapshot.
+
+At the end, all 211 files matched the snapshot. B41 has two variants, one for each way a fallback could happen. Both ran the whole `site-launch.spec.ts`, because test 5 needs the earlier tests to have made the sites live.
+
+| # | Change made | Test that went red, and the message | Protects |
+| --- | --- | --- | --- |
+| B36 | Deleting a published standard page of a live site allowed (the delete branch of `site_pages_keep_standard_live` removed) | DB (`site_launch_rules.sql`): "expected refusal {page_site_live}, but this was allowed: delete from site_pages …" | Review change 1 (delete included, kept by the owner's decision) |
+| B37 | `take_offline` with no role check (a viewer or another client's admin) | DB: "expected refusal {site_offline_not_allowed}, but this was allowed: select take_offline(…)" | S01-5 (Q1) |
+| B38 | `set_signup` allowed for a client admin (`can_approve` instead of `can_manage`) | DB (`subscriber_rules.sql`): "expected refusal {signup_not_allowed}, but this was allowed: select set_signup(…)" | S08-1 |
+| B39 | `update_page_from_template` allowed for a client admin | DB (`privacy_signup_rules.sql`): "expected refusal {page_update_not_allowed}, but this was allowed" | Addition 5 (compliance text changed only by owner and operators) |
+| B40 | A client admin may delete a subscriber (delete policy `can_approve`) | DB: "S-08: a client admin deleted a subscriber" | S08-7 |
+| B41a | End to end: an unknown Host is treated as the platform (the middleware lets it through as an admin host, so the visitor gets the sign-in page) | E2E test 5: "unknown-e2e.com … Expected: 404" | Addition 3 |
+| B41b | End to end: an unknown Host falls back to a brand's site (`getBrand` falls back to Launch One) | E2E test 5: "unknown-e2e.com … Expected: 404, Received: 200" | Addition 3 |
+
+**All seven red on their first run.** No test was missing.
+
+**Batch 2 totals: 43 runs.**
+- 41 red on their first run.
+- B13 red on its second run, after the missing test was added.
+- B34b green, as intended: the mapping backs up the pre-check.
+
