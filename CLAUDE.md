@@ -115,10 +115,11 @@ Do not put a product's price on a page. Link to the seller for the current price
 
 ```
 supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql, 0004_results.sql,
-                       0005_modules_and_test_brands.sql, 0006_client_consistency.sql
+                       0005_modules_and_test_brands.sql, 0006_client_consistency.sql, 0007_privacy_template_wording.sql
 supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, consistency_rules.sql, module_rules.sql,
+                       privacy_template_rules.sql,
                        local_bootstrap.sql, local_grants.sql
-supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency
+supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency, verify_privacy
 scripts/test-db.sh     runs the database tests on a local PostgreSQL (or in a postgres:16 Docker container)
 scripts/test-all.mjs   npm run test:all: type check, unit, database, end-to-end; stops at the first failure
 scripts/e2e*.mjs       local Supabase stack for tests (ports 54421-54427, never the hosted project), test build, Playwright

@@ -4,6 +4,15 @@ One platform for running affiliate marketing and dropshipping brands: a shared c
 
 Story IDs refer to the story bank in `docs/user-stories.md`. The architecture rules are in `CLAUDE.md`. A plain-language explanation of the whole product is in `docs/how-it-works.md`.
 
+## Privacy Policy wording (0007)
+
+`supabase/migrations/0007_privacy_template_wording.sql` changes two things in the Privacy Policy template, and nothing else:
+
+- The click line now also names "the host name of the website you came from", which `record_click()` stores as `referrer_host`.
+- A new last item under "What we collect": "**Server logs kept by our providers.** Our hosting and database providers may keep standard server logs, which can include IP addresses, to run and secure the service."
+
+Brands' existing Privacy Policy pages are copies and are not changed; add the two lines in the page editor and publish. `supabase/verify_privacy.sql` checks the template and lists the pages still on the old wording. Test: `supabase/tests/privacy_template_rules.sql` (both lines present once, in place, and the rest of the template identical to 0003). It fails when 0007 makes no change, when the server-logs line is missing, when its bold label is missing, and when any other wording changes.
+
 ## Increment 5.1: automated end-to-end tests
 
 Plan and decisions: `docs/plans/increment-5.1-plan.md`. One command now runs every test: `npm run test:all`.
@@ -258,7 +267,7 @@ Database access rules (needs a local PostgreSQL and a superuser, or a `postgres:
 ./scripts/test-db.sh
 ```
 
-The script creates scratch databases, applies the schema, and runs the tests. Five lines reading `ALL ACCESS RULE TESTS PASSED`, `ALL SITE RULE TESTS PASSED`, `ALL RESULTS RULE TESTS PASSED`, `ALL CONSISTENCY RULE TESTS PASSED`, and `ALL MODULE RULE TESTS PASSED` mean every rule held.
+The script creates scratch databases, applies the schema, and runs the tests. Six lines reading `ALL ACCESS RULE TESTS PASSED`, `ALL SITE RULE TESTS PASSED`, `ALL RESULTS RULE TESTS PASSED`, `ALL CONSISTENCY RULE TESTS PASSED`, `ALL MODULE RULE TESTS PASSED`, and `ALL PRIVACY TEMPLATE TESTS PASSED` mean every rule held.
 
 To apply the schema to Supabase, run `supabase/migrations/0001_core.sql` in the SQL editor or with the Supabase CLI. The files `local_bootstrap.sql` and `local_grants.sql` are only for local testing; Supabase provides those pieces itself.
 

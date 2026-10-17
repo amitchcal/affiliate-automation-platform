@@ -5,7 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { fail, ROOT } from "./e2e-lib.mjs";
 
-const SUITES = 5;
+const SUITES = 6;
 
 function hasPsql() {
   return spawnSync("psql", ["--version"], { stdio: "ignore" }).status === 0;
