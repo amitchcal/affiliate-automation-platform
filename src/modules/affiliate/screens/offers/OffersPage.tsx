@@ -48,10 +48,16 @@ export default async function OffersPage({
     .maybeSingle();
   if (!brand) notFound();
 
-  const { data: offerRows } = await supabase
+  // Each embed names its foreign key: since 0006 a composite key with client_id
+  // links the same tables too, and PostgREST refuses an embed it cannot resolve.
+  const { data: offerRows, error: offersError } = await supabase
     .from("offers")
-    .select("id, name, network, source, status, affiliate_link, offer_metrics(*), offer_rules(*)")
+    .select(
+      "id, name, network, source, status, affiliate_link, " +
+        "offer_metrics!offer_metrics_offer_id_fkey(*), offer_rules!offer_rules_offer_id_fkey(*)",
+    )
     .eq("brand_id", brandId);
+  if (offersError) throw new Error(`The offers could not be loaded: ${offersError.message}`);
 
   const config = await loadScoringConfig(supabase, brand.client_id, brandId);
 

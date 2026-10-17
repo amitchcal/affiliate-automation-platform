@@ -61,15 +61,17 @@ export default async function BrandSitePage({
     .maybeSingle();
   if (!brand) notFound();
 
-  const [{ data: pageRows }, { data: offerRows }, { data: linkRows }] = await Promise.all([
+  const [{ data: pageRows }, { data: offerRows }, { data: linkRows, error: linksError }] = await Promise.all([
     supabase.from("site_pages").select("*").eq("brand_id", brandId).order("created_at"),
     supabase.from("offers").select("id, name, status, affiliate_link").eq("brand_id", brandId).eq("status", "approved"),
     supabase
       .from("tracked_links")
-      .select("id, slug, channel, campaign, creative, offer_id, click_events(count)")
+      // Names its foreign key: since 0006 a composite key links these tables too.
+      .select("id, slug, channel, campaign, creative, offer_id, click_events!click_events_link_id_fkey(count)")
       .eq("brand_id", brandId)
       .order("created_at"),
   ]);
+  if (linksError) throw new Error(`The tracked links could not be loaded: ${linksError.message}`);
 
   const pages = (pageRows ?? []) as PageRow[];
   const offers = offerRows ?? [];

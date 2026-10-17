@@ -19,12 +19,14 @@ export default async function PageEditor({
   const { notice, error } = await searchParams;
   const supabase = await createClient();
 
-  const { data: page } = await supabase
+  // Names its foreign key: since 0006 a composite key links these tables too.
+  const { data: page, error: pageError } = await supabase
     .from("site_pages")
-    .select("*, brands(name, domain)")
+    .select("*, brands!site_pages_brand_id_fkey(name, domain)")
     .eq("id", pageId)
     .eq("brand_id", brandId)
     .maybeSingle();
+  if (pageError) throw new Error(`The page could not be loaded: ${pageError.message}`);
   if (!page) notFound();
 
   const brand = page.brands as unknown as { name: string; domain: string };
