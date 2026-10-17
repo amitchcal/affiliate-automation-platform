@@ -125,11 +125,11 @@ Other facts noticed:
 
 ### Design changes from step 0
 
-- **D1. How each email is sent depends on the account's state.** `create_invitation` and `resend_invitation` also return a delivery mode, read from `auth.users` inside the database after the authority check:
-  - `invite` when there is no account, or the account is not yet confirmed (inviting again works and reuses the account);
-  - `sign_in_link` when the account is confirmed.
+- **D1. How each email is sent depends on the account's state.** Supabase itself decides (changed by the owner's review of 0008, 17 October 2026). The server first calls `inviteUserByEmail`:
+  - no account, or an account not yet confirmed: Supabase sends the invitation (inviting again works and reuses the account);
+  - a confirmed account: Supabase refuses with `email_exists` and sends nothing, and the server then sends a sign-in link instead.
 
-  The inviter still sees one message either way (change 3).
+  The database does **not** report whether an address has an account: `create_invitation` and `resend_invitation` return only `invitation_id`, `email`, `expires_at`, and there is no `invitation_delivery()`. The inviter sees one message either way (change 3), and the browser response is identical (addition (b)).
 - **D2. "Email me a sign-in link" works only for confirmed accounts.** An invited person who has not yet followed their invitation gets nothing from it: Supabase refuses with sign-up off. They see the same neutral message, which now adds: "If you were invited and have not used your invitation yet, use the link in the invitation email, or ask for it to be sent again." T03-18 is reworded to match.
 - **D3. Email templates use the server-side link check.** Supabase's default link puts the session tokens in the address fragment. Ours point to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (and `type=magiclink`). The `/auth/confirm` route verifies on the server. This was checked: single-use, `403 otp_expired` on reuse.
 - **D4. Recovery ends every session.** Required by your change and confirmed necessary by U11. The fallback SQL and the owner's Reset delete the person's factors, sessions, and refresh tokens (section 8).
@@ -181,7 +181,7 @@ Both migrations are new files. No applied migration is edited. Each is safe to r
   - **Insert, update, delete:** no policy at all. Every change goes through the functions below.
 - `SECURITY DEFINER` functions, executable by `authenticated` only, revoked from `public` and `anon`:
   - `can_invite(client_id, role)`: owner, any of the three roles; client admin of that client, `client_admin` or `client_viewer`; anyone else, false.
-  - `create_invitation(client_id, email, role) returns uuid`: checks `can_invite` and refuses:
+  - `create_invitation(client_id, email, role)` returns exactly `invitation_id`, `email`, `expires_at`. It checks `can_invite` and refuses:
     - a malformed email;
     - the owner's email;
     - an email that already has a membership in that client;
@@ -198,7 +198,7 @@ Both migrations are new files. No applied migration is edited. Each is safe to r
 
     All of this happens in one statement block, so two simultaneous accepts cannot both succeed.
   - `decline_invitation(id)`: only the invited person (confirmed email match, as for accept); open invitations only. Sets `declined_at` and `declined_by`, and writes `decline` to the audit log. Creates nothing.
-  - `resend_invitation(id) returns (email, client_name, role)`:
+  - `resend_invitation(id)` returns exactly `invitation_id`, `email`, `expires_at`:
     1. Re-checks `can_invite(client_id, role)` for the caller **now**: a client admin who has since lost the role, or the second step not done, is refused.
     2. Requires the invitation to be open and unexpired.
     3. Applies the hourly limit (counted with new invitations) and at most 3 sends per invitation.
@@ -220,14 +220,17 @@ Both migrations are new files. No applied migration is edited. Each is safe to r
 | `owner` cannot be invited | the role check excludes `owner` |
 | at most one of accepted, revoked, declined | the check constraint exists |
 | the ten functions exist and are `SECURITY DEFINER` (`is_client_admin`, `current_user_email`, `can_invite`, `create_invitation`, `resend_invitation`, `revoke_invitation`, `accept_invitation`, `decline_invitation`, `client_members`, `my_open_invitations`) | 10 |
-| internal helpers (`invitation_delivery`, `invitations_sent_last_hour`) are not callable by signed-in users | 0 callable |
+| internal helpers (`invitations_sent_last_hour`, `invitation_is_open`) are not callable by signed-in users | 0 callable |
+| create and send-again return only `invitation_id`, `email`, `expires_at` | both |
+| no function says whether an address has an account | `invitation_delivery()` absent |
+| all 12 functions of 0008 set `search_path = public, pg_temp` | 12 of 12 |
 | visitors cannot call them | `anon` has no execute privilege on any |
 | signed-in users can call them | `authenticated` has execute |
 | admins can read their client's memberships | the new policy exists |
 
 **Database test** (`supabase/tests/invitation_rules.sql`): the cases are listed in section 6.
 
-**As built (step 1), beyond the list above:** two helpers the rules need, `is_client_admin(client)` and `current_user_email()`, and `my_open_invitations()`, because an invited person cannot read the clients table until they accept. Internal helpers `invitation_delivery()` and `invitations_sent_last_hour()` run only inside the functions. The rate limit counts the caller's `invite` and `resend` audit rows in the last hour. An expired open invitation is closed by the system (`revoked_at` set, `revoked_by` null) when a new one is sent to the same address.
+**As built (step 1), beyond the list above:** two helpers the rules need, `is_client_admin(client)` and `current_user_email()`, and `my_open_invitations()`, because an invited person cannot read the clients table until they accept. Internal helpers `invitations_sent_last_hour()` and `invitation_is_open()` run only inside the functions. **Every function in 0008 sets `search_path = public, pg_temp`**, so no object a caller creates in another schema, or a temporary one, can stand in for ours. (Owner's review, 17 October 2026: the earlier `invitation_delivery()` and the `delivery` column were removed; 0008 had not been applied to any hosted project, so it was edited in place.) The rate limit counts the caller's `invite` and `resend` audit rows in the last hour. An expired open invitation is closed by the system (`revoked_at` set, `revoked_by` null) when a new one is sent to the same address.
 
 
 ### 0009_two_factor.sql (T-05)
@@ -242,7 +245,7 @@ Both migrations are new files. No applied migration is edited. Each is safe to r
 
   So a viewer who has enrolled is held to `aal2` in the database, exactly like a required role.
 - **Own membership rows stay readable at `aal1`.** The existing policy `memberships_read` is `user_id = auth.uid() or is_owner()`. Its first half does not use the helpers, so a password-only session still reads its own rows after 0009, and nobody else's: `is_owner()` is false at `aal1`. 0009 does not change this policy. A test proves it (T05-11). `mfa_required()` and `has_verified_factor()` are executable by `authenticated`, so the setup screen can call them at `aal1`.
-- `create or replace` of the four access helpers from 0001, so that each also requires `mfa_ok()`: `is_owner()`, `has_client_access()`, `can_manage()`, `can_approve()`. Every existing row-level policy and every rule built on them then refuses a password-only session from a required role, with no other policy rewritten. The 0008 functions use the same helpers, so inviting also needs the second step.
+- `create or replace` of the four access helpers from 0001, so that each also requires `mfa_ok()`: `is_owner()`, `has_client_access()`, `can_manage()`, `can_approve()`. **When 0009 redefines them, each gets `set search_path = public, pg_temp`**, as every function in 0008 has, and so do the new functions of 0009 (`mfa_required`, `has_verified_factor`, `mfa_ok`, `session_active`, `reset_two_factor`, `record_security_event`). `verify_two_factor.sql` gets a row checking it. Every existing row-level policy and every rule built on them then refuses a password-only session from a required role, with no other policy rewritten. The 0008 functions use the same helpers, so inviting also needs the second step.
 - `reset_two_factor_allowed(user_id)`: for the owner only. The deletion itself is done by the server through `auth.admin.mfa.deleteFactor`, only after this check passes. Audited.
 - An audit entry for each two-factor change, written by a small `record_security_event(action)` function the screens call after Supabase confirms the change. It only appends to `audit_log`.
 - **Lockout guard.** The migration stops with a plain message if the owner account has no verified TOTP factor ("Stopped: turn on two-factor sign-in for the owner account first…"). The database test runner sets a session flag that skips this guard. The flag exists only in the test scripts.
@@ -533,6 +536,7 @@ Two-factor:
 | S25 | The sign-in link option creates accounts (`shouldCreateUser: true`) | e2e 3c (account appears for an unknown address) | The sign-in link never creates accounts |
 | S26 | The fallback SQL (or the owner's Reset) skips deleting sessions and refresh tokens | e2e test 8, steps 4–5 (old refresh token still works) | Recovery signs the person out everywhere |
 | S27 | (If D5 is adopted) `session_active()` returns true | DB test with a deleted session; e2e test 8, step 6 | A removed session loses data access at once |
+| S28 | `create_invitation` (or `resend_invitation`) returns a fourth column again, such as `delivery` | DB test "return exactly invitation_id, email, expires_at"; `verify_invitations.sql` row | The database never tells the server, and so never the browser, whether an address has an account. **Run 17 October 2026: red** ("returns {invitation_id,email,expires_at,delivery}"), 0008 restored byte for byte. |
 
 ---
 
@@ -678,7 +682,7 @@ The test runs the repository file itself, with only the address substituted, aga
 - **Q10 (Amit).** The reply-to address for invitation and sign-in emails.
 - **Q11 (Amit).** When PL-13 (deployment at a stable address) will be done. Real invitations wait for it; building does not.
 - **Q12 (D5): yes** (17 October 2026). 0009 adds `session_active()` to the four access helpers.
-- **Q13 (D6): yes** (17 October 2026), with two conditions: `reset_two_factor(user_id)` **refuses to reset the caller's own factors** (refusal `reset_own_two_factor`, message "You cannot reset your own two-factor sign-in. Use your second authenticator, or the recovery steps in section 8."), and it **writes its audit entry in the same transaction** as the deletions, so a reset without an audit row cannot happen. Database tests and sabotage cases S28 (own reset allowed) and S29 (audit written outside the transaction, or skipped) are added for step 6.
+- **Q13 (D6): yes** (17 October 2026), with two conditions: `reset_two_factor(user_id)` **refuses to reset the caller's own factors** (refusal `reset_own_two_factor`, message "You cannot reset your own two-factor sign-in. Use your second authenticator, or the recovery steps in section 8."), and it **writes its audit entry in the same transaction** as the deletions, so a reset without an audit row cannot happen. Database tests and sabotage cases S29 (audit written outside the transaction, or skipped) and S32 (own reset allowed) are added for step 6. S32 was S28 until the owner assigned S28 to the returned-columns case on 17 October 2026.
 
 ### Build order (small steps; each ends with its tests passing)
 
@@ -691,7 +695,7 @@ The test runs the repository file itself, with only the address substituted, aga
 | 4 | Two-factor setup, add and remove, the code step at sign-in (no enforcement yet); TOTP helper; `two-factor.spec.ts` parts 1, 2, 5 | **`npm run test:all`** |
 | 5 | 0009 enforcement, `two_factor_rules.sql`, `verify_two_factor.sql`; existing suites and `signIn()` use the second step; remaining two-factor e2e parts | **`npm run test:all`** |
 | 6 | Owner reset of two-factor; `supabase/recovery/remove_two_factor.sql`; recovery tests (e2e test 8); audit entries | **`npm run test:all`** |
-| 7 | Sabotage runs S1–S25 with a report; README, CLAUDE.md, `how-it-works.md`, story status | **`npm run test:all`** before handover |
+| 7 | Sabotage runs S1–S32 with a report; README, CLAUDE.md, `how-it-works.md`, story status | **`npm run test:all`** before handover |
 
 Handover to Amit happens only after step 7, with:
 - the hosted settings to check (section 7);

@@ -159,21 +159,48 @@ begin
 end $$;
 rollback;
 
--- ---------- Delivery: invitation for no account or unconfirmed, sign-in link for confirmed ----------
+-- ---------- Create and Send again return exactly invitation_id, email, expires_at ----------
+-- Nothing about the address's account (whether it exists, whether it is
+-- confirmed) leaves the database, so nothing can reach the browser (addition (b)).
+do $$
+declare
+  f text;
+  out_names text[];
+begin
+  foreach f in array array['create_invitation(uuid, text, app_role)', 'resend_invitation(uuid)'] loop
+    select array_agg(name order by n)
+    into out_names
+    from pg_proc p,
+         unnest(p.proargnames, p.proargmodes) with ordinality as a(name, mode, n)
+    where p.oid = f::regprocedure and a.mode = 't';
+    if out_names is distinct from array['invitation_id', 'email', 'expires_at'] then
+      raise exception 'T-03: % must return exactly invitation_id, email, expires_at; it returns %', f, out_names;
+    end if;
+  end loop;
+end $$;
+
 begin;
 do $$
 declare
   a constant uuid := 'aaaaaaaa-0000-0000-0000-000000000000';
+  inv uuid;
+  keys text[];
 begin
   perform test_login('00000000-0000-0000-0000-0000000000a1');
-  if (select delivery from create_invitation(a, 'nobody-yet@test.example', 'client_viewer')) <> 'invite' then
-    raise exception 'D1: no account should get an invitation';
-  end if;
-  if (select delivery from create_invitation(a, 'unconf@test.example', 'client_viewer')) <> 'invite' then
-    raise exception 'D1: an unconfirmed account should get an invitation';
-  end if;
-  if (select delivery from create_invitation(a, 'new@test.example', 'client_viewer')) <> 'sign_in_link' then
-    raise exception 'D1: a confirmed account should get a sign-in link';
+  -- No account, unconfirmed account, confirmed account: the same three fields each time.
+  foreach keys slice 1 in array array[
+    (select array_agg(k order by k) from create_invitation(a, 'nobody-yet@test.example', 'client_viewer') r, jsonb_object_keys(to_jsonb(r)) k),
+    (select array_agg(k order by k) from create_invitation(a, 'unconf@test.example', 'client_viewer') r, jsonb_object_keys(to_jsonb(r)) k),
+    (select array_agg(k order by k) from create_invitation(a, 'new@test.example', 'client_viewer') r, jsonb_object_keys(to_jsonb(r)) k)
+  ] loop
+    if keys is distinct from array['email', 'expires_at', 'invitation_id'] then
+      raise exception 'T-03: create_invitation returned %', keys;
+    end if;
+  end loop;
+  select id into inv from invitations where email = 'new@test.example';
+  if (select array_agg(k order by k) from resend_invitation(inv) r, jsonb_object_keys(to_jsonb(r)) k)
+     is distinct from array['email', 'expires_at', 'invitation_id'] then
+    raise exception 'T-03: resend_invitation must return exactly invitation_id, email, expires_at';
   end if;
 end $$;
 rollback;
@@ -319,7 +346,7 @@ declare
 begin
   perform test_login('00000000-0000-0000-0000-0000000000a1');
   select invitation_id into inv from create_invitation(a, 'nobody-yet@test.example', 'client_viewer');
-  if (select delivery from resend_invitation(inv)) <> 'invite' then raise exception 'T-03: resend delivery'; end if;  -- send 2
+  perform resend_invitation(inv);  -- send 2
 
   perform test_superuser();
   audit_before := (select count(*) from audit_log);
@@ -458,11 +485,35 @@ begin
     if has_function_privilege('anon', f, 'execute') then raise exception 'T-03: visitors can call %', f; end if;
     if not has_function_privilege('authenticated', f, 'execute') then raise exception 'T-03: signed-in users cannot call %', f; end if;
   end loop;
-  foreach f in array array['invitation_delivery(text)', 'invitations_sent_last_hour()'] loop
+  foreach f in array array['invitations_sent_last_hour()', 'invitation_is_open(invitations)'] loop
     if has_function_privilege('authenticated', f, 'execute') or has_function_privilege('anon', f, 'execute') then
       raise exception 'T-03: % should be callable only inside the invitation functions', f;
     end if;
   end loop;
+  if to_regprocedure('invitation_delivery(text)') is not null then
+    raise exception 'T-03: invitation_delivery() should no longer exist';
+  end if;
+end $$;
+
+-- ---------- Every function of 0008 fixes its search path to public, pg_temp ----------
+do $$
+declare
+  missing text;
+begin
+  select string_agg(p.proname, ', ') into missing
+  from pg_proc p
+  where p.pronamespace = 'public'::regnamespace
+    and p.proname in ('is_client_admin', 'current_user_email', 'can_invite', 'invitations_sent_last_hour',
+                      'invitation_is_open', 'create_invitation', 'resend_invitation', 'revoke_invitation',
+                      'accept_invitation', 'decline_invitation', 'client_members', 'my_open_invitations')
+    and not coalesce(p.proconfig @> array['search_path=public, pg_temp'], false);
+  if missing is not null then raise exception 'T-03: search_path is not public, pg_temp in: %', missing; end if;
+  if (select count(*) from pg_proc where pronamespace = 'public'::regnamespace
+      and proname in ('is_client_admin', 'current_user_email', 'can_invite', 'invitations_sent_last_hour',
+                      'invitation_is_open', 'create_invitation', 'resend_invitation', 'revoke_invitation',
+                      'accept_invitation', 'decline_invitation', 'client_members', 'my_open_invitations')) <> 12 then
+    raise exception 'T-03: expected the 12 functions of 0008';
+  end if;
 end $$;
 
 \echo 'ALL INVITATION RULE TESTS PASSED'

@@ -16,6 +16,9 @@
 -- a short stable code (for example invite_role_not_allowed), which the screens
 -- turn into plain wording.
 --
+-- Every function sets search_path = public, pg_temp, so no object a caller
+-- creates in another schema (or a temporary one) can stand in for ours.
+--
 -- Safe to run more than once.
 -- =============================================================================
 
@@ -59,7 +62,7 @@ create index if not exists invitations_email_idx on invitations (email);
 -- 2. Helpers.
 -- ----------------------------------------------------------------------------
 create or replace function is_client_admin(p_client uuid) returns boolean
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select exists (
     select 1 from memberships
     where user_id = auth.uid() and client_id = p_client and role = 'client_admin'
@@ -68,7 +71,7 @@ $$;
 
 -- The signed-in account's email, lower-case, from Supabase's auth.users.
 create or replace function current_user_email() returns text
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select lower(email) from auth.users where id = auth.uid();
 $$;
 
@@ -77,7 +80,7 @@ $$;
 --   client admin: client admin or viewer, into their own client only
 --   anyone else: nobody
 create or replace function can_invite(p_client uuid, p_role app_role) returns boolean
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select case
     when p_role is null or p_role not in ('operator', 'client_admin', 'client_viewer') then false
     when is_owner() then true
@@ -86,25 +89,16 @@ language sql stable security definer set search_path = public as $$
   end;
 $$;
 
--- How Supabase should deliver the email (step 0, D1): an invitation when there
--- is no account or it is not yet confirmed; a sign-in link when it is.
-create or replace function invitation_delivery(p_email text) returns text
-language sql stable security definer set search_path = public as $$
-  select case when exists (
-    select 1 from auth.users where lower(email) = p_email and email_confirmed_at is not null
-  ) then 'sign_in_link' else 'invite' end;
-$$;
-
 -- Invitations sent or sent again by the caller in the last hour.
 create or replace function invitations_sent_last_hour() returns integer
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select count(*)::integer from audit_log
   where actor_id = auth.uid() and entity = 'invitations' and action in ('invite', 'resend')
     and created_at > now() - interval '1 hour';
 $$;
 
 create or replace function invitation_is_open(inv invitations) returns boolean
-language sql immutable as $$
+language sql immutable set search_path = public, pg_temp as $$
   select inv.accepted_at is null and inv.revoked_at is null and inv.declined_at is null;
 $$;
 
@@ -112,8 +106,8 @@ $$;
 -- 3. Create, send again, withdraw.
 -- ----------------------------------------------------------------------------
 create or replace function create_invitation(p_client uuid, p_email text, p_role app_role)
-returns table (invitation_id uuid, email text, expires_at timestamptz, delivery text)
-language plpgsql security definer set search_path = public as $$
+returns table (invitation_id uuid, email text, expires_at timestamptz)
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_email text := lower(btrim(coalesce(p_email, '')));
   v_row invitations;
@@ -166,14 +160,14 @@ begin
   values (p_client, auth.uid(), 'user', 'invite', 'invitations', v_row.id::text,
           jsonb_build_object('email', v_email, 'role', p_role, 'expires_at', v_row.expires_at));
 
-  return query select v_row.id, v_row.email, v_row.expires_at, invitation_delivery(v_email);
+  return query select v_row.id, v_row.email, v_row.expires_at;
 end;
 $$;
 
 -- Send again: authority is checked again now, before the server sends anything.
 create or replace function resend_invitation(p_id uuid)
-returns table (invitation_id uuid, email text, expires_at timestamptz, delivery text)
-language plpgsql security definer set search_path = public as $$
+returns table (invitation_id uuid, email text, expires_at timestamptz)
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_row invitations;
 begin
@@ -194,12 +188,12 @@ begin
   values (v_row.client_id, auth.uid(), 'user', 'resend', 'invitations', v_row.id::text,
           jsonb_build_object('email', v_row.email, 'send_count', v_row.send_count));
 
-  return query select v_row.id, v_row.email, v_row.expires_at, invitation_delivery(v_row.email);
+  return query select v_row.id, v_row.email, v_row.expires_at;
 end;
 $$;
 
 create or replace function revoke_invitation(p_id uuid) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_row invitations;
 begin
@@ -224,7 +218,7 @@ $$;
 -- ----------------------------------------------------------------------------
 create or replace function accept_invitation(p_id uuid)
 returns table (client_id uuid, client_name text, role app_role)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_email text := current_user_email();
   v_row invitations;
@@ -260,7 +254,7 @@ end;
 $$;
 
 create or replace function decline_invitation(p_id uuid) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_email text := current_user_email();
   v_row invitations;
@@ -287,7 +281,7 @@ $$;
 -- A client's members with their email addresses, for the owner and that client's admins.
 create or replace function client_members(p_client uuid)
 returns table (user_id uuid, email text, role app_role, joined_at timestamptz)
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql stable security definer set search_path = public, pg_temp as $$
 begin
   if not (is_owner() or is_client_admin(p_client)) then raise exception 'members_not_allowed'; end if;
   return query
@@ -302,7 +296,7 @@ $$;
 -- read the clients table until they have accepted).
 create or replace function my_open_invitations()
 returns table (id uuid, client_name text, role app_role, expires_at timestamptz)
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select i.id, c.name, i.role, i.expires_at
   from invitations i join clients c on c.id = i.client_id
   where i.email = current_user_email()
@@ -341,7 +335,7 @@ begin
   end loop;
   -- Used only inside the functions above, which run as their owner.
   foreach f in array array[
-    'invitation_delivery(text)', 'invitations_sent_last_hour()', 'invitation_is_open(invitations)'
+    'invitations_sent_last_hour()', 'invitation_is_open(invitations)'
   ] loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
   end loop;

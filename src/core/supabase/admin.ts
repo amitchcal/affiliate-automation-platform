@@ -11,8 +11,6 @@ import { createClient } from "@supabase/supabase-js";
  * address, a link, or a key.
  */
 
-export type Delivery = "invite" | "sign_in_link";
-
 function noSession(key: string) {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -21,18 +19,19 @@ function noSession(key: string) {
 
 /**
  * Sends the email for an invitation the database has just created or allowed
- * to be sent again. Step 0 (D1): an account that is not yet confirmed gets the
- * invitation again; a confirmed account gets a sign-in link.
- * Returns whether Supabase accepted the email for sending.
+ * to be sent again. Supabase decides which email fits (step 0, U1): an
+ * invitation for a new or not-yet-confirmed account; for a confirmed account
+ * it refuses with "email_exists", and a sign-in link is sent instead. The
+ * caller cannot tell which was sent, so neither can the browser.
+ * Returns whether Supabase accepted an email for sending.
  */
-export async function sendInvitationEmail(email: string, delivery: Delivery): Promise<boolean> {
-  if (delivery === "invite") {
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!serviceKey) return false;
-    const { error } = await noSession(serviceKey).auth.admin.inviteUserByEmail(email);
-    return !error;
-  }
-  return (await sendSignInLink(email)) === "sent";
+export async function sendInvitationEmail(email: string): Promise<boolean> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return false;
+  const { error } = await noSession(serviceKey).auth.admin.inviteUserByEmail(email);
+  if (!error) return true;
+  if (error.code === "email_exists") return (await sendSignInLink(email)) === "sent";
+  return false;
 }
 
 /**

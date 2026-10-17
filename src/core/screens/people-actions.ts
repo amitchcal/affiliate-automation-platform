@@ -9,7 +9,7 @@ import {
   normaliseEmail,
   refusalMessage,
 } from "@/core/invitations";
-import { Delivery, sendInvitationEmail } from "@/core/supabase/admin";
+import { sendInvitationEmail } from "@/core/supabase/admin";
 import { createClient } from "@/core/supabase/server";
 
 const peoplePath = (clientId: string) => `/clients/${clientId}/people`;
@@ -22,14 +22,14 @@ interface SendRow {
   invitation_id: string;
   email: string;
   expires_at: string;
-  delivery: Delivery;
 }
 
 /**
  * T-03: invite a person. The database decides whether this person may invite
  * this role into this client, and records the invitation, before anything is
  * sent. The response is the same whether Supabase sends an invitation or a
- * sign-in link (addition (b)), so it never reveals who already has an account.
+ * sign-in link (addition (b)), so it never reveals who already has an account;
+ * the database does not know or say which it will be.
  */
 export async function inviteToClient(formData: FormData) {
   const clientId = String(formData.get("client_id") ?? "");
@@ -51,7 +51,7 @@ export async function inviteToClient(formData: FormData) {
 
   const sent = (data as SendRow[])[0];
   revalidatePath(peoplePath(clientId));
-  if (!(await sendInvitationEmail(sent.email, sent.delivery))) back(clientId, "error", EMAIL_NOT_SENT);
+  if (!(await sendInvitationEmail(sent.email))) back(clientId, "error", EMAIL_NOT_SENT);
   back(clientId, "notice", invitationSentMessage(sent.email, sent.expires_at));
 }
 
@@ -65,7 +65,7 @@ export async function sendInvitationAgain(formData: FormData) {
 
   const sent = (data as SendRow[])[0];
   revalidatePath(peoplePath(clientId));
-  if (!(await sendInvitationEmail(sent.email, sent.delivery))) back(clientId, "error", EMAIL_NOT_SENT);
+  if (!(await sendInvitationEmail(sent.email))) back(clientId, "error", EMAIL_NOT_SENT);
   back(clientId, "notice", `Invitation sent again to ${sent.email}.`);
 }
 
