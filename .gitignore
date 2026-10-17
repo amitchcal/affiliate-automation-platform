@@ -5,3 +5,9 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 .claude/settings.local.json
+# End-to-end tests (increment 5.1): per-run settings and passwords, the test build, results
+e2e/.run/
+.next-e2e
+test-results/
+playwright-report/
+supabase/.temp/

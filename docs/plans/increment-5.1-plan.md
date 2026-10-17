@@ -1,6 +1,6 @@
 # Increment 5.1 plan: automated end-to-end testing
 
-Prepared 13 October 2026. Status: approved by the owner on 13 October 2026, with the answers in section 8. Building starts next session.
+Prepared 13 October 2026. Status: approved by the owner on 13 October 2026, with the answers in section 8. Built on 17 October 2026; `npm run test:all` passes. See README, "Increment 5.1".
 
 ## 1. Scope
 

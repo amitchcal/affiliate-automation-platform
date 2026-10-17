@@ -22,7 +22,14 @@ run_suite() {
   # A second run proves 0006 is safe to apply twice.
   $PSQL -d "$db" -f supabase/migrations/0006_client_consistency.sql >/dev/null
   $PSQL -d "$db" -f supabase/tests/local_grants.sql >/dev/null
-  $PSQL -d "$db" -f "$test_file" | grep -v "^ *$" | grep -E "PASSED|ERROR" || true
+  # A failing test stops psql with an ERROR, so the suite's PASSED line never prints.
+  local out
+  if ! out=$($PSQL -d "$db" -f "$test_file" 2>&1); then
+    echo "$out" | grep -E "ERROR|PASSED" || true
+    echo "FAILED: $test_file"
+    return 1
+  fi
+  echo "$out" | grep -E "PASSED"
 }
 
 run_suite map_test_access  supabase/tests/access_rules.sql

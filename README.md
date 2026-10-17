@@ -4,6 +4,43 @@ One platform for running affiliate marketing and dropshipping brands: a shared c
 
 Story IDs refer to the story bank in `docs/user-stories.md`. The architecture rules are in `CLAUDE.md`. A plain-language explanation of the whole product is in `docs/how-it-works.md`.
 
+## Increment 5.1: automated end-to-end tests
+
+Plan and decisions: `docs/plans/increment-5.1-plan.md`. One command now runs every test: `npm run test:all`.
+
+| File | What it does |
+| --- | --- |
+| `scripts/test-all.mjs` | Type check, unit tests, database tests, end-to-end tests, in that order; stops at the first failure and prints a summary |
+| `scripts/test-db.mjs` | Runs `scripts/test-db.sh` with the local `psql`, or inside a throwaway `postgres:16` Docker container |
+| `scripts/e2e-db.mjs` | Starts this project's own local Supabase stack in Docker (ports 54421–54427), creates the four test users with new random passwords, applies 0001–0006, loads `e2e/seed.sql` |
+| `scripts/e2e.mjs` | Builds the application into `.next-e2e` against the local stack, checks the build never names the hosted project, runs Playwright |
+| `scripts/e2e-lib.mjs`, `scripts/e2e-guard.test.ts` | The guard: only `http://127.0.0.1:54421` is accepted; the hosted project, and ports 54321/54322 used by another local project, are refused. Unit tested. |
+| `e2e/supabase/config.toml` | Local stack settings, with no migrations of its own |
+| `e2e/seed.sql` | Separation Test Co, an approved Pet Sleep Guide offer, sales on fixed dates |
+| `e2e/*.spec.ts` | 25 tests covering the increment 5 walkthrough (see the plan, section 3) |
+
+Per-run passwords live only in `e2e/.run/`, which git ignores. `.env.local` is never read by the test build.
+
+### Bug found by the new tests, and fixed
+
+Migration 0006 added a second, composite foreign key between several pairs of tables (for example `offers` and `offer_metrics`). Supabase's data API then refuses a query that embeds one table in the other without saying which key to follow. Three screens were affected on any database with 0006 applied, **including the live Supabase project**:
+
+| Screen | What the user saw | Fix |
+| --- | --- | --- |
+| Offers | "No offers yet", even with offers recorded | The query names `offer_metrics_offer_id_fkey` and `offer_rules_offer_id_fkey` |
+| Site and links | Tracked links missing from the list | The query names `click_events_link_id_fkey` |
+| Page editor | The page could not be opened | The query names `site_pages_brand_id_fkey` |
+
+These queries now also show an error page if a query fails, instead of an empty list. No database change is needed.
+
+### What was verified
+
+| Check | Result |
+| --- | --- |
+| `npm run test:all` on the development machine (Windows, Docker Desktop) | Pass: type check; 104 unit tests; 5 database suites; 25 end-to-end tests. About 2 minutes. |
+| The new tests catch a real fault | Before the fix, the Offers and page-editor tests failed against the 0006 schema; the tracked-links query was confirmed refused by calling the local data API directly |
+| The fix on the live Supabase project | Not verified from here. Covered by the owner's walkthrough after deploying. |
+
 ## Increment 5: module split, test brands, module entitlement
 
 Plan and decisions: `docs/plans/increment-5-plan.md`.
@@ -198,11 +235,20 @@ TypeScript is pinned to version 5. Next.js 15 does not yet read the project sett
 
 ## Run it
 
-Scoring engine (needs Node 20 or later):
+Every test, in one command (needs Node 20 or later and Docker Desktop running):
 
 ```bash
 npm install
-npm test          # 90 tests
+npx playwright install chromium   # once
+npm run test:all
+```
+
+Parts on their own: `npm test` (unit), `npm run test:db` (database), `npm run test:e2e` (end-to-end; extra arguments go to Playwright, for example `npm run test:e2e -- e2e/site.spec.ts`). Screenshots are saved in `test-results/e2e/screens`; open the report with `npx playwright show-report test-results/e2e/report`.
+
+Scoring engine only:
+
+```bash
+npm test          # 104 tests
 npm run typecheck
 ```
 

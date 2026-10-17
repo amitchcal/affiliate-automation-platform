@@ -2,7 +2,7 @@
 
 This file gives Claude Code the context for this repository. Read it before making changes. It records what the product is, what has been decided, what is built, and how work is expected to be done.
 
-Last updated: 13 October 2026, during increment 5 (application code built, awaiting the owner's walkthrough).
+Last updated: 17 October 2026, after increment 5.1 (end-to-end tests built; increment 5 still awaiting the owner's walkthrough).
 
 ## What this product is
 
@@ -109,6 +109,7 @@ Do not put a product's price on a page. Link to the seller for the current price
 | 3 | Compliance templates, site pages with draft and publish, wording check, public brand site by domain, tracked links with click recording | Done, tested end to end locally. Owner still to run `0003_site.sql` and the walkthrough |
 | 4 | ClickBank sales import (P-01 partial), combined metrics per offer (P-02), results dashboard per brand with date range (P-03) | Done; unit and database tests pass on PostgreSQL 16. `0004_results.sql` applied on the owner's Supabase project and all 8 `verify_results.sql` checks read ok. Live import path untested until the first real sale exists. |
 | 5 | Code split into core and the affiliate module; renamed Affiqube; AffiQube seed renamed AffilyVault and Famperia added; module entitlement by business type (T-07); every row's client matches its parents (0006) | Built. 90 unit tests and five database suites pass on PostgreSQL 16. 0005 applied on Supabase, all 15 `verify_modules.sql` rows ok. 0006 applied on Supabase, all 6 `verify_consistency.sql` rows ok. Application code committed; owner walkthrough of the screens pending. |
+| 5.1 | Local Supabase in Docker for tests; 25 Playwright end-to-end tests of the increment 5 walkthrough; `npm run test:all` runs every test. Fixed three screens (Offers, tracked links, page editor) whose embedded queries 0006 had made ambiguous | Built. `npm run test:all` passes: 104 unit tests, five database suites, 25 end-to-end tests. Fix not yet checked on the live project. |
 
 ### Layout
 
@@ -119,6 +120,9 @@ supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, cons
                        local_bootstrap.sql, local_grants.sql
 supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency
 scripts/test-db.sh     runs the database tests on a local PostgreSQL (or in a postgres:16 Docker container)
+scripts/test-all.mjs   npm run test:all: type check, unit, database, end-to-end; stops at the first failure
+scripts/e2e*.mjs       local Supabase stack for tests (ports 54421-54427, never the hosted project), test build, Playwright
+e2e/                   Playwright tests (*.spec.ts), seed.sql, supabase/config.toml, support/helpers.ts
 docs/                  user-stories.md, how-it-works.md (plain-language explanation, updated every increment), plans/
 src/core/              shared by every business type; never imports a module
   modules.ts           business types, module definitions, brand tabs, refusal wording (T-07)
@@ -144,7 +148,8 @@ src/middleware.ts      routing by domain, and sessions
 
 ```bash
 npm install
-npm test            # unit tests (90)
+npm run test:all    # every test; needs Docker Desktop running. Run before handing work over
+npm test            # unit tests (104)
 npm run typecheck
 npm run build
 npm run dev
@@ -295,6 +300,8 @@ Follow "Build order" in the architecture section and the release plan in `docs/u
 
 - **Small increments.** Each one ends with tests passing and a short list of what the owner must verify by hand.
 - **Tests are required.** Pure logic gets unit tests. Every database rule gets a test in `supabase/tests`. Prove that a test fails when the protection is removed.
+- **End-to-end tests.** Every increment adds end-to-end tests in `e2e/` for its acceptance rows. Work is handed to the owner only when `npm run test:all` passes. The tests run only against the local test stack; never point them at the hosted project.
+- **Embedded queries name their foreign key** when two keys link the same tables (since 0006, most do): `offer_metrics!offer_metrics_offer_id_fkey(*)`, not `offer_metrics(*)`. Check the query's `error`; do not show an empty list when a query failed.
 - **Migrations are numbered and never edited after they are applied.** Add a new file. Provide a verify query the owner can run in the Supabase SQL editor.
 - **Security lives in the database.** Do not rely on middleware or the interface to protect data. New tables get row-level security and a test.
 - **Never commit secrets,** and never ask the owner to paste a service role key, database password, or API key into a chat.
