@@ -7,6 +7,8 @@ import { BusinessDetails, missingDetails } from "@/modules/affiliate/site/site";
 import { createArticle, createLink, createOfferPage, createStandardPages } from "./actions";
 import { LaunchSections, rolesFor } from "./LaunchSections";
 import { updateFromTemplate } from "./launch-actions";
+import { ConfirmButton } from "@/core/components/ConfirmButton";
+import { TEMPLATE_UPDATE_CONFIRM, TEMPLATE_UPDATE_WARNING } from "@/modules/affiliate/site/launch";
 
 interface PageRow {
   id: string;
@@ -142,9 +144,14 @@ export default async function BrandSitePage({
             <input type="hidden" name="page_id" value={page.id} />
             <p>A newer {page.title} template is available.</p>
             {roles.canManage ? (
-              <div className="actions">
-                <button type="submit">Update from template</button>
-              </div>
+              <>
+                <p className="hint" data-warning="template-update">
+                  {TEMPLATE_UPDATE_WARNING}
+                </p>
+                <div className="actions">
+                  <ConfirmButton message={TEMPLATE_UPDATE_CONFIRM}>Update from template</ConfirmButton>
+                </div>
+              </>
             ) : null}
           </form>
         ))}

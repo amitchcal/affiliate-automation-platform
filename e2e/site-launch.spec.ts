@@ -7,7 +7,7 @@
 // What this does not prove: real DNS propagation, Vercel's own domain setup,
 // or TLS on a real domain.
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { LAUNCH_REFUSALS, SIGNUP_MESSAGES } from "../src/modules/affiliate/site/launch";
+import { LAUNCH_REFUSALS, SIGNUP_MESSAGES, TEMPLATE_UPDATE_CONFIRM, TEMPLATE_UPDATE_WARNING } from "../src/modules/affiliate/site/launch";
 import {
   alert,
   brandUrl,
@@ -285,9 +285,21 @@ test("9. Sign-up: needs the current policy; the policy stays published; consent 
   await owner.getByRole("button", { name: "Unpublish" }).click();
   await expect(alert(owner)).toHaveText(LAUNCH_REFUSALS.page_site_live);
 
-  // Update from template, review, publish; then sign-up can be turned on.
+  // Update from template warns that it replaces the draft, and asks first: cancelling changes nothing.
   await owner.goto(site(L1));
-  await owner.locator('[data-outdated="privacy"]').getByRole("button", { name: "Update from template" }).click();
+  const outdated = owner.locator('[data-outdated="privacy"]');
+  await expect(outdated.locator('[data-warning="template-update"]')).toHaveText(TEMPLATE_UPDATE_WARNING);
+  const draftBefore = sqlOnTestDatabase(`select md5(draft_body) || template_version from site_pages where brand_id = '${L1.id}' and template_key = 'privacy'`);
+  owner.once("dialog", (dialog) => {
+    expect(dialog.message()).toBe(TEMPLATE_UPDATE_CONFIRM);
+    void dialog.dismiss();
+  });
+  await outdated.getByRole("button", { name: "Update from template" }).click();
+  await expect(outdated).toBeVisible();
+  expect(sqlOnTestDatabase(`select md5(draft_body) || template_version from site_pages where brand_id = '${L1.id}' and template_key = 'privacy'`)).toBe(draftBefore);
+  // Confirmed: the draft is replaced; then review, publish, and sign-up can be turned on.
+  owner.once("dialog", (dialog) => void dialog.accept());
+  await outdated.getByRole("button", { name: "Update from template" }).click();
   await expect(notice(owner)).toContainText("The draft now has the current template wording.");
   await owner.getByRole("button", { name: "Publish changes" }).click();
   await expect(notice(owner)).toHaveText("Published.");

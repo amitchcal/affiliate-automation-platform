@@ -279,4 +279,30 @@ begin
 end $$;
 rollback;
 
+-- ---------- privacy_page_current is internal (owner's SQL review, change 1) ----------
+insert into clients (id, name) values ('bbbbbbbb-0000-0000-0000-000000000000', 'Client B');
+insert into brands (id, client_id, name, domain, business_type)
+values ('bbbbbbbb-1111-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000000', 'Brand B1', 'brand-b-test.com', 'affiliate');
+begin;
+do $$
+begin
+  -- A signed-in user of client A, asking about client B's brand: a permission error, not an answer.
+  perform test_login('00000000-0000-0000-0000-0000000000a1');
+  perform expect_refusal($q$select privacy_page_current('bbbbbbbb-1111-0000-0000-000000000001')$q$,
+                         array['permission denied for function privacy_page_current']);
+  -- Nor about their own (the screens read the checklist's privacy_current row instead).
+  perform test_login('00000000-0000-0000-0000-0000000000a3');
+  perform expect_refusal($q$select privacy_page_current('aaaaaaaa-1111-0000-0000-000000000001')$q$,
+                         array['permission denied for function privacy_page_current']);
+  if exists (select 1 from site_launch_checklist('aaaaaaaa-1111-0000-0000-000000000001') where key = 'privacy_current') is not true then
+    raise exception 'S-08: the checklist should still answer privacy_current';
+  end if;
+  perform test_superuser();
+  if has_function_privilege('authenticated', 'privacy_page_current(uuid)', 'execute')
+     or has_function_privilege('anon', 'privacy_page_current(uuid)', 'execute') then
+    raise exception 'S-08: privacy_page_current should be callable only inside other functions';
+  end if;
+end $$;
+rollback;
+
 \echo 'ALL PRIVACY SIGN-UP TESTS PASSED'

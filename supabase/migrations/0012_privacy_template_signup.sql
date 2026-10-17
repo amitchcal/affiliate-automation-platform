@@ -315,10 +315,11 @@ do $$
 declare
   f text;
 begin
-  foreach f in array array['update_page_from_template(uuid)', 'privacy_page_current(uuid)'] loop
-    execute format('revoke all on function %s from public, anon', f);
-    execute format('grant execute on function %s to authenticated', f);
-  end loop;
+  execute 'revoke all on function update_page_from_template(uuid) from public, anon';
+  execute 'grant execute on function update_page_from_template(uuid) to authenticated';
+  -- Internal: set_signup, signup_brand_for_host and the checklist call it inside
+  -- security-definer functions; screens read the checklist's privacy_current row.
+  execute 'revoke all on function privacy_page_current(uuid) from public, anon, authenticated';
   execute 'revoke all on function site_pages_template_version() from public, anon, authenticated';
   execute 'revoke all on function site_pages_no_placeholders() from public, anon, authenticated';
   execute 'revoke all on function signup_brand_for_host(text) from public, anon, authenticated';

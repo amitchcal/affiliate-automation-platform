@@ -69,4 +69,19 @@ select 'consent wording version 1 is present',
                          and body like 'Yes, email me updates from {{brand}}%')
             then 'ok' else 'missing' end
 union all
+select 'signed-in users have no insert, update or truncate on subscribers',
+       case when not has_table_privilege('authenticated', 'public.subscribers', 'insert')
+             and not has_table_privilege('authenticated', 'public.subscribers', 'update')
+             and not has_table_privilege('authenticated', 'public.subscribers', 'truncate')
+            then 'ok' else 'no' end
+union all
+select 'signed-in users have no update on brand_domains',
+       case when not has_table_privilege('authenticated', 'public.brand_domains', 'update') then 'ok' else 'no' end
+union all
+select 'signed-in users have no insert, update or delete on aff_sites',
+       case when not has_table_privilege('authenticated', 'public.aff_sites', 'insert')
+             and not has_table_privilege('authenticated', 'public.aff_sites', 'update')
+             and not has_table_privilege('authenticated', 'public.aff_sites', 'delete')
+            then 'ok' else 'no' end
+union all
 select 'subscribers stored (information)', (select count(*)::text from subscribers);

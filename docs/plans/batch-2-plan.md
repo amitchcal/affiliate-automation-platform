@@ -467,3 +467,18 @@ Also: `site_already_live`; sign-up needs a contact email; no standard page publi
   - Fake DNS answers are written to `e2e/.run/dns.json`, which the application reads only when it points at the local stack.
 - **The `site.spec.ts` public-site test** now takes AffilyVault live on `affilyvault.com` first, because 0010 ended the public preview.
 - **`npm run test:all`:** 216 unit tests, 12 database checks, 54 end-to-end tests.
+
+---
+
+## 14. Known limits (owner's SQL review, 17 October 2026)
+
+(a) **Going live and an unpublish at the same moment.** `go_live` reads the launch checklist and then marks the site live. A person unpublishing a standard page in the same instant can commit between the two, so both succeed, and the site is live with one standard page unpublished. Once live, the page cannot be unpublished again (`page_site_live`). The gap is the moment itself. It is not closed in this batch: closing it would mean locking the brand's standard pages while `go_live` runs.
+
+(b) **Unsubscribed, then signing up again.** `subscribe()` keeps the first record for a brand and email (`on conflict do nothing`). A person who unsubscribed (batch 16) and signs up again therefore stays unsubscribed, and no new consent record is written. Batch 16 decides how re-subscription works.
+
+(c) **Update from template replaces the draft.** The screen now says so before it runs, in two places:
+- the panel carries the sentence "Updating replaces this page's draft with the template's wording, filled with the brand's details. Changes made in the draft are lost. Visitors keep seeing the published page until you publish.";
+- pressing the button asks "Replace this page's draft with the template's wording? Changes made in the draft are lost. The published page does not change until you publish." Cancelling sends nothing.
+
+The end-to-end test checks the sentence and the question, and that cancelling leaves the draft unchanged.
+

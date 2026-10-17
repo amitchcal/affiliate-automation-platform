@@ -35,6 +35,8 @@ After 0010, no brand site is public until its domain is checked and it goes live
 | The protections fail when removed | 36 sabotage runs: 34 red; B13 red after a missing test was added; B34b green, as intended (`docs/plans/batch-2-sabotage-report.md`) |
 | Real DNS, Vercel domains, TLS, a real visitor's sign-up | Not verified from here |
 
+Known limits (going live during an unpublish; re-subscription; Update from template replacing the draft): `docs/plans/batch-2-plan.md`, section 14.
+
 ## Increment 6: invitations (T-03) and two-factor sign-in (T-05)
 
 Plan and decisions: `docs/plans/increment-6-plan.md`. Sabotage report: `docs/plans/increment-6-sabotage-report.md`. This completes Epic 1 (tenancy and access) and is batch 1 of `docs/plans/batch-plan.md`.

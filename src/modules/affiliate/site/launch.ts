@@ -88,6 +88,12 @@ export function signupOutcome(databaseMessage: string | undefined): SignupOutcom
   return code in SIGNUP_MESSAGES && code !== "done" ? (code as SignupOutcome) : "signup_unavailable";
 }
 
+/** Update from template replaces the draft (owner's SQL review, known limit c): said on the panel and asked before it runs. */
+export const TEMPLATE_UPDATE_WARNING =
+  "Updating replaces this page's draft with the template's wording, filled with the brand's details. Changes made in the draft are lost. Visitors keep seeing the published page until you publish.";
+export const TEMPLATE_UPDATE_CONFIRM =
+  "Replace this page's draft with the template's wording? Changes made in the draft are lost. The published page does not change until you publish.";
+
 export const SITE_STATUS_TEXT = {
   none: "No site yet.",
   draft: "Draft: not visible to the public.",
