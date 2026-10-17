@@ -37,8 +37,8 @@ Nothing has been applied to the hosted project yet.
 
 | Check | Result |
 | --- | --- |
-| `npm run test:all` on the development machine (Windows, Docker Desktop) | See the batch report in the plan; counts below |
-| The protections fail when removed | Sabotage report, `docs/plans/increment-6-sabotage-report.md` |
+| `npm run test:all` on the development machine (Windows, Docker Desktop) | Pass: type check; 167 unit tests; eight database suites and the recovery-file test, every suite with 0009 applied; 42 end-to-end tests. About 4 minutes. |
+| The protections fail when removed | 37 sabotage runs: 36 red; S25 green, covered by S17 and S25b. `docs/plans/increment-6-sabotage-report.md` |
 | Real email, a real phone app, the hosted project's settings | Not verified from here: the owner's manual checks after deployment |
 
 ## Privacy Policy wording (0007)

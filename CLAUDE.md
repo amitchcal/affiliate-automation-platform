@@ -155,7 +155,7 @@ src/middleware.ts      routing by domain, and sessions
 ```bash
 npm install
 npm run test:all    # every test; needs Docker Desktop running. Run before handing work over
-npm test            # unit tests (165)
+npm test            # unit tests (167)
 npm run typecheck
 npm run build
 npm run dev

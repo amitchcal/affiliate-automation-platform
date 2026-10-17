@@ -59,7 +59,10 @@ describe("architecture rules", () => {
 
   it("only server code imports the server-only email sender (core/supabase/admin)", () => {
     const admin = path.join(SRC, "core", "supabase", "admin");
-    const importers = sourceFiles(SRC).filter((file) => importsOf(file).includes(admin));
+    // Unit tests (*.test.ts) are never built into the application, so they may import it.
+    const importers = sourceFiles(SRC)
+      .filter((file) => !file.endsWith(".test.ts"))
+      .filter((file) => importsOf(file).includes(admin));
     expect(importers.length).toBeGreaterThan(0);
     for (const file of importers) {
       expect(readFileSync(file, "utf8"), path.relative(SRC, file)).toMatch(/^\s*["']use server["']/);
