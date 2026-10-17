@@ -1,6 +1,6 @@
 # Batch 2 plan: go-live gate (S-01, S-08)
 
-Prepared 17 October 2026. Status: **approved to build on 17 October 2026, with the owner's answers and six additions (section 11, which overrides anything earlier in this plan).** Built on branch `batch-2` from `increment-6`. Batch 1 (increment 6) is built and committed on `increment-6`. Its 0008 and 0009 are not yet applied on Supabase.
+Prepared 17 October 2026. Status: **built on 17 October 2026 (steps 1 to 6) on branch `batch-2`, with the owner's answers and additions (section 11) and his review of 0010 to 0012 (section 13). Sabotage report: `batch-2-sabotage-report.md`. Nothing applied to the hosted project.** Batch 1 (increment 6) is built and committed on `increment-6`. Its 0008 and 0009 are not yet applied on Supabase.
 
 Gate: starts after batch 1. **Reserved migration numbers: 0010, 0011, 0012.** Batch 1 used 0008 and 0009.
 
@@ -443,3 +443,27 @@ Sabotage runs only for rules that protect access, money, compliance, or data iso
 - **On the local Supabase stack**, 0010 to 0012 apply cleanly. Backfill: AffilyVault draft with `affilyvault.com` pending; Famperia's `famperia.com` pending with no site (it is a dropshipping brand); nothing live.
 - **Not committed at the pause.** The end-to-end tests now fail by design: the application still reads sites through the public functions, which serve nothing until a site is live, and previews need the new preview functions. Both are steps 3 and 4. The batch is committed when `npm run test:all` is green.
 
+
+---
+
+## 13. The owner's review of 0010 to 0012, and the build (17 October 2026)
+
+**Changes made in place (unapplied migrations):**
+
+1. A live site's published standard pages cannot be unpublished or deleted (`page_site_live`). Delete was added to the same rule so that it cannot be used to get around it. The rule applies while the site is served (live, with the affiliate module on).
+2. `privacy_page_current` also requires the published body to contain the sign-up paragraph.
+3. `subscribe()` and `public_signup()` require a current policy. They moved from 0011 to 0012, which defines the check.
+4. `subscribe(p_host, p_email, p_page, p_consented, p_consent_version, p_honeypot)`: a version other than the current one is refused (`signup_wording_changed`).
+5. `record_domain_check` refuses when any other row for the host is verified, the same client's other brand included, and also maps a `unique_violation` to `domain_taken`.
+
+Also: `site_already_live`; sign-up needs a contact email; no standard page published with a `{{placeholder}}`.
+
+**Build notes:**
+
+- **Server actions and hosts.** A server action's redirect is rendered inside the same request, without the middleware's routing by host. The sign-up form therefore returns its answer to the form (`useActionState`) instead of redirecting.
+- **End-to-end tests on brand hosts.**
+  - The test browser maps the test hosts to the local application (Chromium `--host-resolver-rules`).
+  - Crafted Host headers (empty, look-alike) go straight to the server through `rawGet`.
+  - Fake DNS answers are written to `e2e/.run/dns.json`, which the application reads only when it points at the local stack.
+- **The `site.spec.ts` public-site test** now takes AffilyVault live on `affilyvault.com` first, because 0010 ended the public preview.
+- **`npm run test:all`:** 216 unit tests, 12 database checks, 54 end-to-end tests.

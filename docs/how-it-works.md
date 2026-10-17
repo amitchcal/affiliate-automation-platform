@@ -1,7 +1,7 @@
 # How it works
 
 A plain-language overview for someone who needs to understand the product without reading the code.
-Updated after increment 6, October 2026.
+Updated after batch 2, October 2026.
 
 ---
 
@@ -135,6 +135,49 @@ the same draft, check, and publish flow.
 A page can be updated as many times as needed in draft without visitors seeing anything new.
 Once published, the published version stays visible even if the draft is changed again. A second
 publish is needed for changes to go live.
+
+### Going live on the brand's own domain
+
+A brand's site starts as a **draft**: nobody outside can see it. Signed-in people of that client
+can preview it inside the platform.
+
+To go live:
+
+1. **Set up site** creates the site from the standard template, with the four standard pages.
+2. Add the brand's **domain** (for example `brand.com`). The platform shows two DNS records to add
+   where the domain is managed: one proves the brand owns the domain, the other points it at the
+   platform. **Check domain** looks the records up. It only reads DNS; it never visits the domain.
+3. The **launch checklist** shows what is still missing: business details, the four standard pages
+   published, a verified domain. **Go live** works only when every item passes, and only for the
+   owner and operators. The database checks this again, so it holds even if someone skips the screen.
+
+Once live, visitors see the site on its verified domain and nowhere else. Any other address,
+including a look-alike one, shows "This site is not available." A domain can belong to one brand
+only, so one client can never take over another's domain. While a site is live, its standard
+pages (disclosure, privacy, terms, contact) cannot be unpublished: take the site offline first.
+Client admins can take a site offline at any time.
+
+A **Links only** domain, such as `go.brand.com`, carries tracked links while the pages are still
+elsewhere (for example on Shopify).
+
+If a later check of a live domain fails, the site stays up, a warning shows on the brand's screens,
+and the site cannot go live again until the domain passes.
+
+### Email sign-up
+
+A live site can show a sign-up form. It is **off** until the owner or an operator switches it on,
+and it works only while the brand's Privacy Policy is the current version and still explains what
+sign-up stores.
+
+The visitor must tick an unticked box beside the consent wording. The platform stores the email
+address, the exact wording the visitor saw, its version, the page, and the time. It stores no IP
+address. If the wording changes while the form is open, the sign-up is refused and the form shows
+the new wording.
+
+No emails are sent yet. Sign-ups wait for confirmation until the email platform is connected
+(batch 16). The owner, operators, and the client's admins see the list; viewers see only the count.
+Deleting a subscriber, for someone who asks to be forgotten, removes the address, and the record of
+the deletion keeps no address.
 
 ---
 

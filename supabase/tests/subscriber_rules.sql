@@ -161,6 +161,23 @@ begin
   perform test_superuser();
   if exists (select 1 from subscribers where email = 'bot@example.com') then raise exception 'S-08: the honeypot stored a sign-up'; end if;
 
+  -- Sign-up still on, but the site no longer live (offline, or a draft): refused, and the form is gone (B13).
+  perform test_superuser();
+  update aff_sites set status = 'offline' where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001';
+  update aff_sites set signup_enabled = true where brand_id = 'aaaaaaaa-1111-0000-0000-000000000002';
+  perform test_anon();
+  perform expect_refusal($q$select subscribe('brand-a-test.com', 'offline@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
+  perform expect_refusal($q$select subscribe('brand-a2-test.com', 'draft@example.com', 'home', true, 1)$q$, array['signup_unavailable']);
+  if exists (select 1 from public_signup('brand-a-test.com')) or exists (select 1 from public_signup('brand-a2-test.com')) then
+    raise exception 'S-08: the form shows on a site that is not live';
+  end if;
+  perform test_superuser();
+  if exists (select 1 from subscribers where email in ('offline@example.com', 'draft@example.com')) then
+    raise exception 'S-08: stored on a site that is not live';
+  end if;
+  update aff_sites set status = 'live' where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001';
+  update aff_sites set signup_enabled = false where brand_id = 'aaaaaaaa-1111-0000-0000-000000000002';
+
   -- Turned off: refused again, existing records kept.
   update aff_sites set signup_enabled = false where brand_id = 'aaaaaaaa-1111-0000-0000-000000000001';
   perform test_anon();

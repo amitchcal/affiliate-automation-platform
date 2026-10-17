@@ -1,8 +1,39 @@
 # Affiqube
 
-One platform for running affiliate marketing and dropshipping brands: a shared core, plus one module per kind of business. Increments 1 to 4 built the data model with access rules, the offer scoring engine, the application, the public brand site with compliant pages and tracked links, and results from ClickBank sales. Increment 5 split the code into core and modules and switched each brand's modules on by its business type. Increment 6 added invitations and two-factor sign-in.
+One platform for running affiliate marketing and dropshipping brands: a shared core, plus one module per kind of business. Increments 1 to 4 built the data model with access rules, the offer scoring engine, the application, the public brand site with compliant pages and tracked links, and results from ClickBank sales. Increment 5 split the code into core and modules and switched each brand's modules on by its business type. Increment 6 added invitations and two-factor sign-in. Batch 2 added the go-live gate and email sign-up.
 
 Story IDs refer to the story bank in `docs/user-stories.md`. The architecture rules are in `CLAUDE.md`. A plain-language explanation of the whole product is in `docs/how-it-works.md`.
+
+## Batch 2: go-live gate (S-01) and email sign-up (S-08)
+
+Plan: `docs/plans/batch-2-plan.md`. Sabotage report: `docs/plans/batch-2-sabotage-report.md`.
+
+| File | What it does | Stories |
+| --- | --- | --- |
+| `supabase/migrations/0010_sites_and_domains.sql` | Brand hosts proven by DNS (the result written only by the server), one verified row per host across clients; sites draft, live, offline, with a launch checklist enforced by `go_live`; exact host matching; Links-only hosts; previews for members of the client; live standard pages kept published | S-01 |
+| `supabase/migrations/0011_subscribers_and_consent.sql` | Subscribers with the exact consent wording, version, time, host and page; per-site switch, off by default; viewers see counts only; deletion audited without the address | S-08 |
+| `supabase/migrations/0012_privacy_template_signup.sql` | Privacy Policy template version 2; page versions set by the database only; Update from template; `subscribe()` needs a current policy and the consent version the form showed; no `{{placeholder}}` on a published standard page | S-08 |
+| `src/core/domains/` | Host rules, DNS-only check (never contacts the host), resolver with a test fake allowed only against the local stack, actions, warnings | S-01 |
+| `src/modules/affiliate/screens/site/LaunchSections.tsx`, `launch-actions.ts` | Going live, Domains with their DNS records, Email sign-up and subscribers on the Site and links tab | S-01, S-08 |
+| `src/modules/affiliate/public-site/` | Live sites only; preview for members; "This site is not available." for every other host; the sign-up form | S-01, S-08 |
+| `supabase/tests/site_launch_rules.sql`, `subscriber_rules.sql`, `privacy_signup_rules.sql` | Database tests | S-01, S-08 |
+| `supabase/verify_sites.sql`, `verify_subscribers.sql`, `verify_privacy_signup.sql` | Checks for the Supabase SQL editor | S-01, S-08 |
+| `e2e/site-launch.spec.ts` | 11 end-to-end tests on brand hosts (fake DNS, test hosts mapped to the local application) | S-01, S-08 |
+
+### Apply the database changes, after batch 1, in this order
+
+1. `0010_sites_and_domains.sql`, then `0011_subscribers_and_consent.sql`, then `0012_privacy_template_signup.sql`.
+2. Then `verify_sites.sql`, `verify_subscribers.sql` (it needs 0012), and `verify_privacy_signup.sql`. Every row should read ok.
+
+After 0010, no brand site is public until its domain is checked and it goes live.
+
+### What was verified
+
+| Check | Result |
+| --- | --- |
+| `npm run test:all` on the development machine | Pass: type check; 216 unit tests; 12 database checks (eleven suites and the recovery-file test); 54 end-to-end tests |
+| The protections fail when removed | 36 sabotage runs: 34 red; B13 red after a missing test was added; B34b green, as intended (`docs/plans/batch-2-sabotage-report.md`) |
+| Real DNS, Vercel domains, TLS, a real visitor's sign-up | Not verified from here |
 
 ## Increment 6: invitations (T-03) and two-factor sign-in (T-05)
 
@@ -336,6 +367,8 @@ Agents run on the server with Supabase's service role, which bypasses row-level 
 | T-03 | Invited users receive a role limited to that client | Met; tested at the database and end to end on the local stack. Real email needs the SMTP account and deployment (PL-13). |
 | T-03 | A client admin cannot invite operators, or into another client | Met; tested |
 | T-04 | The owner can open any client's brands | Met; tested |
+| S-01 | One deployment serves several domains, each showing only its brand | Met; tested at the database and end to end on two live brands (batch 2). Not yet applied to the hosted project. |
+| S-08 | Each subscriber record stores the consent text and time | Met; tested; also the version, host and page. No email is sent until batch 16. |
 | T-05 | Owner and client admin logins require a second factor (also operators; optional for viewers) | Met; enforced by the database (0009); tested at the database and end to end on the local stack. Not yet applied to the hosted project. |
 | T-05 | A lost authenticator can be reset by the owner, or removed with the recovery SQL | Met; both tested on the local stack only |
 | T-06 | Each entry records actor, time, action, before and after | Met; tested |

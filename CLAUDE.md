@@ -2,7 +2,7 @@
 
 This file gives Claude Code the context for this repository. Read it before making changes. It records what the product is, what has been decided, what is built, and how work is expected to be done.
 
-Last updated: 17 October 2026, after increment 6 (batch 1: invitations and two-factor sign-in built and tested locally; nothing applied to the hosted project yet; increment 5 still awaiting the owner's walkthrough).
+Last updated: 17 October 2026, after batch 2 (go-live gate and email sign-up built and tested locally; batches 1 and 2 not applied to the hosted project; increment 5 still awaiting the owner's walkthrough).
 
 ## What this product is
 
@@ -111,18 +111,21 @@ Do not put a product's price on a page. Link to the seller for the current price
 | 5 | Code split into core and the affiliate module; renamed Affiqube; AffiQube seed renamed AffilyVault and Famperia added; module entitlement by business type (T-07); every row's client matches its parents (0006) | Built. 90 unit tests and five database suites pass on PostgreSQL 16. 0005 applied on Supabase, all 15 `verify_modules.sql` rows ok. 0006 applied on Supabase, all 6 `verify_consistency.sql` rows ok. Application code committed; owner walkthrough of the screens pending. |
 | 5.1 | Local Supabase in Docker for tests; 25 Playwright end-to-end tests of the increment 5 walkthrough; `npm run test:all` runs every test. Fixed three screens (Offers, tracked links, page editor) whose embedded queries 0006 had made ambiguous | Built. `npm run test:all` passes: 104 unit tests, five database suites, 25 end-to-end tests. Fix not yet checked on the live project. |
 | 6 | Batch 1. Invitations (T-03, 0008): People screen, invite, Send again, withdraw, accept, decline, email links that need Continue. Two-factor sign-in (T-05, 0009): required for owner, operators, client admins, optional for viewers, enforced by the database with a live-session check; owner's reset; recovery SQL | Built and tested on the local stack; see the batch report in `docs/plans/increment-6-plan.md` and `docs/plans/increment-6-sabotage-report.md`. 0008 and 0009 not applied on Supabase; real email waits for the SMTP account and deployment (PL-13). |
+| Batch 2 | Go-live gate (S-01, 0010): hosts proven by a DNS check (lookups only; the result written by the server with the service role), one verified row per host across clients, draft/live/offline sites with a launch checklist enforced by `go_live`, exact host matching, Links-only hosts, previews for members of the client only, live standard pages cannot be unpublished. Email sign-up (S-08, 0011, 0012): per-site switch (off by default), exact consent wording and version stored, no IP addresses, viewers see counts only, deletion leaves no address; Privacy Policy template version 2 reaching brands only through Update from template | Built and tested on the local stack; `docs/plans/batch-2-plan.md` and `docs/plans/batch-2-sabotage-report.md`. 0010 to 0012 not applied on Supabase. Real sign-ups wait for batch 16 (confirmation email, consent and policy version 2) and the per-visitor rate limit. |
 
 ### Layout
 
 ```
 supabase/migrations/   0001_core.sql, 0002_seed_first_client.sql, 0003_site.sql, 0004_results.sql,
                        0005_modules_and_test_brands.sql, 0006_client_consistency.sql, 0007_privacy_template_wording.sql,
-                       0008_invitations.sql, 0009_two_factor.sql
+                       0008_invitations.sql, 0009_two_factor.sql, 0010_sites_and_domains.sql,
+                       0011_subscribers_and_consent.sql, 0012_privacy_template_signup.sql
 supabase/tests/        access_rules.sql, site_rules.sql, results_rules.sql, consistency_rules.sql, module_rules.sql,
                        privacy_template_rules.sql, invitation_rules.sql, two_factor_rules.sql,
-                       local_bootstrap.sql, local_grants.sql (every suite runs with 0009 applied, at aal2)
+                       site_launch_rules.sql, subscriber_rules.sql, privacy_signup_rules.sql,
+                       local_bootstrap.sql, local_grants.sql, local_sites.sql (test-only; refuses outside map_test_ databases)
 supabase/verify*.sql   checks to run in the Supabase SQL editor: verify, verify_site, verify_results, verify_modules, verify_consistency,
-                       verify_privacy, verify_invitations, verify_two_factor
+                       verify_privacy, verify_invitations, verify_two_factor, verify_sites, verify_subscribers, verify_privacy_signup
 supabase/recovery/     remove_two_factor.sql: lost-authenticator fallback, for the Supabase SQL editor only
 supabase/email-templates/  invitation and sign-in email texts, pasted into the Supabase dashboard
 scripts/test-db.sh     runs the database tests on a local PostgreSQL (or in a postgres:16 Docker container)
@@ -135,6 +138,7 @@ src/core/              shared by every business type; never imports a module
   brand-access.ts      server-side check that a brand has a module (server only)
   scoring/             scoring engine (config, score) and scoring-config loading
   compliance/          wording check (K-05)
+  domains/             host rules, DNS-only domain check, resolver (test fake for the local stack only), actions, warnings (S-01)
   content/             Markdown renderer
   supabase/            server and public clients
   components/          BrandNav (tabs passed in)
@@ -155,7 +159,7 @@ src/middleware.ts      routing by domain, and sessions
 ```bash
 npm install
 npm run test:all    # every test; needs Docker Desktop running. Run before handing work over
-npm test            # unit tests (167)
+npm test            # unit tests (216)
 npm run typecheck
 npm run build
 npm run dev
@@ -170,6 +174,8 @@ npm run dev
 NEXT_PUBLIC_SUPABASE_URL=https://ktucieqhbkqktomigrsz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ADMIN_HOSTS=localhost,127.0.0.1        # optional; *.vercel.app is always an admin host
+SITE_DNS_CNAME_TARGETS=<from Vercel>   # what a brand's domain must point at (S-01); comma separated
+SITE_DNS_A_TARGETS=<from Vercel>       # the A record address for a domain without a prefix
 CLICKBANK_API_KEY=<ClickBank API key>  # temporary; per-brand credentials go in the connections table (C-05) when that screen is built.
                                        # The connection row with secret_ref 'env:CLICKBANK_API_KEY' names the one client this key belongs to.
 ```
@@ -178,9 +184,10 @@ The service role key is used for one thing: sending invitation emails (`src/core
 
 ### How the public site is served
 
-- On an admin host, the application is served, and a brand's site can be previewed at `/site/<domain>`. Admin hosts are `affiqube.com` (the platform's own domain), localhost, `*.vercel.app`, and anything in `ADMIN_HOSTS`.
-- On any other host, the request is treated as a brand's own domain and its site is served from the root.
-- Visitors have no table access. They use four `SECURITY DEFINER` functions: `public_brand`, `public_pages`, `public_page`, `record_click`. Each serves only brands with the affiliate module.
+- On an admin host, the application is served, and a brand's site can be previewed at `/site/<domain>` by a signed-in member of the brand's client only (the `preview_*` functions; preview clicks are not recorded). Admin hosts are `affiqube.com` (the platform's own domain), localhost, `*.vercel.app`, and anything in `ADMIN_HOSTS`.
+- On any other host, the request is treated as a brand's own domain. Since 0010 its site is served only if the host is a **verified Site host** of a **live** site (matched exactly: no `www.` stripping, no suffix, no fallback). A verified **Links only** host serves `/go/<code>` redirects and nothing else. Every other host gets 404 "This site is not available."
+- Visitors have no table access. They use `SECURITY DEFINER` functions: `public_brand`, `public_pages`, `public_page`, `record_click`, and for sign-up `public_signup` and `subscribe`. Each serves only brands with the affiliate module.
+- Server actions render their redirect target inside the same request, without the middleware's routing by host. Public-site actions therefore return their answer to the form (no redirect), and sign-in actions decide the landing page themselves.
 
 ### Rules enforced in the database
 
@@ -200,6 +207,10 @@ The service role key is used for one thing: sending invitation emails (`src/core
 - People join a client only by accepting an invitation sent to their confirmed email address, for exactly the role it names. Only the owner invites operators; a client admin invites client admins and viewers into their own client only (0008).
 - Two-factor sign-in (0009): the access helpers require a live session token (with its `aal` and `session_id` claims) and, for the owner, operators, client admins, and any viewer with a verified authenticator, `aal2`. A password-only session reads only its own membership rows. Accepting or declining one's own invitation needs a live session, not the second step.
 - Only the owner can reset another person's two-factor sign-in, never their own; the reset deletes their authenticators, sessions, and refresh tokens and is audited in the same transaction.
+- A brand's host is verified only by the server's DNS check (`record_domain_check`, service role only), and at most one row per host can be verified, across all clients (0010).
+- A site goes live only through `go_live` (owner and operators), and only when the launch checklist passes; client admins may take it offline. While live, its published standard pages cannot be unpublished or deleted (0010).
+- Visitors sign up only through `subscribe()`: live site, switch on, current Privacy Policy (version and sign-up paragraph), the consent version the form showed. The wording stored comes from `consent_texts`. No IP address is stored. Viewers see counts only; deleting a subscriber leaves no address in our tables (0011, 0012).
+- A standard page cannot be published with a `{{placeholder}}` left in it, and a page's template version is set only by the database (0012).
 - Changes to configuration, offers, rules, connections, page publishing, invitations, and two-factor sign-in are written to `audit_log`, which cannot be updated or deleted.
 
 ## Offer scoring
@@ -254,14 +265,14 @@ The story bank of 13 October 2026 in `docs/user-stories.md` adds the dropshippin
 | O-04 | Agent drafts the rules record from seller terms | Should | Not started |
 | O-05 | Select and approve offers before content | Must | Done |
 | O-06 | Tracked link per channel and variant | Must | Done |
-| S-01 | Site per brand on its own domain | Must | Partial: routing done; brands are created in SQL |
+| S-01 | Site per brand on its own domain | Must | Built (batch 2): proven domains, go-live gate, exact hosts; tested locally. 0010 not applied on Supabase; brands still created in SQL until W-01 |
 | S-02 | Agent drafts the offer page | Must | Not started: pages are written by hand from a starter |
 | S-03 | Draft, approve, publish flow with preview | Must | Done |
 | S-04 | Standard pages exist before offer pages publish | Must | Done |
 | S-05 | Home page lists active offers | Must | Done |
 | S-06 | Articles | Must | Done |
 | S-07 | Tracked redirect recording each click | Must | Done |
-| S-08 | Email sign-up with recorded consent | Should | Not started |
+| S-08 | Email sign-up with recorded consent | Should | Built (batch 2): consent recorded exactly, switch off by default; tested locally. Not for real use until batch 16 and the per-visitor rate limit |
 | S-09 | Daily link and content check | Should | Not started |
 | S-10 | Version history with rollback | Should | Not started |
 | S-11 | Hosted checkout for own digital products | Could | Not started |
