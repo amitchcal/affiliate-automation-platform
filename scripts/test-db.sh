@@ -78,13 +78,26 @@ recovery_sql_test() {
     insert into auth.refresh_tokens (token, user_id, session_id) values
       ('r1', '00000000-0000-0000-0000-0000000000a1', '44444444-0000-0000-0000-0000000000a1'),
       ('r2', '00000000-0000-0000-0000-0000000000a1', '55555555-0000-0000-0000-0000000000a1');" >/dev/null
+  local reason="identity confirmed by phone on 17 Oct"
   # An address that matches no account: no row back, nothing changed.
-  out=$(sed "s/PUT-THE-EMAIL-HERE/nobody@test.example/" supabase/recovery/remove_two_factor.sql | $PSQL -d "$db" -At)
+  out=$(sed -e "s/PUT-THE-EMAIL-HERE/nobody@test.example/" -e "s/PUT-THE-REASON-HERE/$reason/" supabase/recovery/remove_two_factor.sql | $PSQL -d "$db" -At)
   if [ -n "$out" ]; then echo "FAILED: the recovery SQL returned a row for an unknown address: $out"; return 1; fi
+  # The reason left as its placeholder, or empty: no row back, nothing changed.
+  out=$(sed -e "s/PUT-THE-EMAIL-HERE/admin@test.example/" supabase/recovery/remove_two_factor.sql | $PSQL -d "$db" -At)
+  if [ -n "$out" ]; then echo "FAILED: the recovery SQL ran with the reason placeholder left in: $out"; return 1; fi
+  out=$(sed -e "s/PUT-THE-EMAIL-HERE/admin@test.example/" -e "s/PUT-THE-REASON-HERE/  /" supabase/recovery/remove_two_factor.sql | $PSQL -d "$db" -At)
+  if [ -n "$out" ]; then echo "FAILED: the recovery SQL ran with an empty reason: $out"; return 1; fi
+  if [ "$($PSQL -d "$db" -At -c "select count(*) from auth.mfa_factors where user_id = '00000000-0000-0000-0000-0000000000a1'")" != "1" ]; then
+    echo "FAILED: a refused recovery run removed the authenticator"; return 1
+  fi
   # The admin, typed with capitals and spaces as a person might.
-  out=$(sed "s/PUT-THE-EMAIL-HERE/ Admin@Test.Example /" supabase/recovery/remove_two_factor.sql | $PSQL -d "$db" -At)
+  out=$(sed -e "s/PUT-THE-EMAIL-HERE/ Admin@Test.Example /" -e "s/PUT-THE-REASON-HERE/$reason/" supabase/recovery/remove_two_factor.sql | $PSQL -d "$db" -At)
   if ! echo "$out" | grep -q '"factors_removed": 1, "sessions_removed": 2, "refresh_tokens_removed": 2'; then
     echo "FAILED: the recovery SQL returned: $out"; return 1
+  fi
+  if [ "$($PSQL -d "$db" -At -c "select actor_type || '|' || coalesce(actor_id::text, 'none') || '|' || (after ->> 'source') || '|' || (after ->> 'reason')
+                                 from audit_log where action = 'two_factor_reset_by_sql'")" != "agent|none|sql_editor|$reason" ]; then
+    echo "FAILED: the recovery audit entry should be agent, no actor, sql_editor, and the reason"; return 1
   fi
   left=$($PSQL -d "$db" -At -c "
     select (select count(*) from auth.mfa_factors where user_id = '00000000-0000-0000-0000-0000000000a1')

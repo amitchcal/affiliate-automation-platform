@@ -307,15 +307,24 @@ test("part 8: recovery with the repository's SQL file signs the person out every
   await enterCode(oldPage, totp(recoverKey));
   await expect(oldPage).toHaveURL(/\/clients$/);
 
-  // The repository's file, with only the address filled in, on the local test database.
+  // The repository's file, with only the address and the reason filled in, on the local test database.
   const file = readFileSync(path.join(__dirname, "..", "supabase", "recovery", "remove_two_factor.sql"), "utf8");
   expect(file.match(/PUT-THE-EMAIL-HERE/g)).toHaveLength(1);
-  const output = sqlOnTestDatabase(file.replace("PUT-THE-EMAIL-HERE", RECOVER));
+  expect(file.match(/PUT-THE-REASON-HERE/g)).toHaveLength(1);
+  const reason = "identity confirmed by phone on 17 Oct";
+  const output = sqlOnTestDatabase(file.replace("PUT-THE-EMAIL-HERE", RECOVER).replace("PUT-THE-REASON-HERE", reason));
   const counts = JSON.parse(output.split("\n").find((line) => line.startsWith(ids.recover))!.split("|")[1]);
   expect(counts.factors_removed).toBe(1);
   expect(counts.sessions_removed).toBeGreaterThanOrEqual(2);
   expect(counts.refresh_tokens_removed).toBeGreaterThanOrEqual(2);
   expect(auditCount("two_factor_reset_by_sql", ids.recover)).toBe(1);
+  expect(counts.source).toBe("sql_editor");
+  expect(counts.reason).toBe(reason);
+  expect(
+    sqlOnTestDatabase(
+      `select actor_type || '|' || coalesce(actor_id::text, 'none') from audit_log where action = 'two_factor_reset_by_sql' and entity_id = '${ids.recover}'`,
+    ),
+  ).toBe("agent|none");
 
   // The old browser is sent to sign-in on its next page.
   await oldPage.goto(`/clients/${IDS.vividha}`);
